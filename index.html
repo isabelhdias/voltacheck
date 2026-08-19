@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#16233D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Cêntimo — máquinas de depósito, estado em tempo real</title>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --ink:#16233D;
+    --ink-soft:#5A6786;
+    --paper:#F2F4F1;
+    --line:#DDE1DC;
+    --azulejo:#2F6FB2;
+    --ok:#1F9E63;
+    --full:#D9932B;
+    --down:#D64545;
+    --stale:#8C93A5;
+    --sheet-h:0px;
+  }
+
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+
+  html,body{
+    height:100%;margin:0;
+    font-family:'Archivo',system-ui,-apple-system,sans-serif;
+    color:var(--ink);background:var(--paper);
+    overscroll-behavior:none;
+  }
+
+  /* ---------- map ---------- */
+  #map{position:absolute;inset:0;background:#E7EAE6}
+  .leaflet-container{font-family:inherit}
+  .leaflet-control-attribution{font-size:9px;background:rgba(242,244,241,.82)}
+
+  /* ---------- header ---------- */
+  .topbar{
+    position:absolute;top:0;left:0;right:0;z-index:600;
+    padding:calc(env(safe-area-inset-top) + 10px) 12px 10px;
+    background:linear-gradient(180deg,var(--paper) 62%,rgba(242,244,241,0));
+    pointer-events:none;
+  }
+  .brand{display:flex;align-items:baseline;gap:8px}
+  .brand h1{
+    margin:0;font-size:19px;font-weight:800;letter-spacing:-.03em;
+  }
+  .brand span{
+    font-size:11px;font-weight:500;color:var(--ink-soft);letter-spacing:.01em;
+  }
+  .tally{
+    display:flex;gap:6px;margin-top:8px;pointer-events:auto;
+    font-size:11px;font-weight:700;
+  }
+  .tally b{
+    display:inline-flex;align-items:center;gap:5px;
+    background:#fff;border:1px solid var(--line);border-radius:99px;
+    padding:4px 9px;font-weight:700;
+  }
+  .tally i{width:7px;height:7px;border-radius:99px;font-style:normal}
+
+  /* ---------- pins ---------- */
+  .pin{
+    display:grid;place-items:center;
+    width:26px;height:26px;border-radius:99px;
+    border:2.5px solid #fff;
+    box-shadow:0 2px 5px rgba(22,35,61,.32);
+    font-size:13px;line-height:1;font-weight:800;color:#fff;
+  }
+  .pin[data-s="ok"]{background:var(--ok)}
+  .pin[data-s="full"]{background:var(--full)}
+  .pin[data-s="down"]{background:var(--down)}
+  .pin[data-s="stale"]{background:var(--stale)}
+  .pin.is-sel{transform:scale(1.28);z-index:9999}
+
+  /* ---------- floating buttons ---------- */
+  .fabs{
+    position:absolute;right:12px;z-index:600;
+    bottom:calc(var(--sheet-h) + env(safe-area-inset-bottom) + 16px);
+    display:flex;flex-direction:column;gap:8px;
+    transition:bottom .22s ease;
+  }
+  .fab{
+    width:46px;height:46px;border-radius:14px;border:1px solid var(--line);
+    background:#fff;color:var(--ink);font-size:19px;
+    display:grid;place-items:center;cursor:pointer;
+    box-shadow:0 3px 10px rgba(22,35,61,.14);
+  }
+  .fab.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+  /* ---------- bottom sheet ---------- */
+  .sheet{
+    position:absolute;left:0;right:0;bottom:0;z-index:700;
+    background:#fff;border-top:1px solid var(--line);
+    border-radius:20px 20px 0 0;
+    padding:14px 16px calc(env(safe-area-inset-bottom) + 16px);
+    box-shadow:0 -6px 26px rgba(22,35,61,.16);
+    transform:translateY(102%);transition:transform .24s cubic-bezier(.3,.8,.4,1);
+  }
+  .sheet.open{transform:translateY(0)}
+  .sheet .grip{
+    width:36px;height:4px;border-radius:99px;background:var(--line);
+    margin:0 auto 12px;
+  }
+  .sheet h2{margin:0;font-size:17px;font-weight:800;letter-spacing:-.02em;line-height:1.25}
+  .meta{margin:5px 0 0;font-size:12px;color:var(--ink-soft);font-weight:500}
+  .state{
+    display:inline-flex;align-items:center;gap:6px;
+    font-weight:700;font-size:12px;margin-top:10px;
+    padding:4px 9px;border-radius:99px;color:#fff;
+  }
+
+  .ask{
+    margin:14px 0 0;font-size:11px;font-weight:700;
+    text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);
+  }
+  .choices{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+  .choice{
+    border:1.5px solid var(--line);background:#fff;border-radius:13px;
+    padding:11px 6px;font:inherit;font-weight:700;font-size:12.5px;
+    color:var(--ink);cursor:pointer;line-height:1.3;
+    display:flex;flex-direction:column;align-items:center;gap:6px;
+  }
+  .choice u{width:11px;height:11px;border-radius:99px;text-decoration:none}
+  .choice:active{transform:scale(.96)}
+  .choice[data-s="ok"]:hover{border-color:var(--ok)}
+  .choice[data-s="full"]:hover{border-color:var(--full)}
+  .choice[data-s="down"]:hover{border-color:var(--down)}
+
+  .log{
+    margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line);
+    font-size:11.5px;color:var(--ink-soft);font-weight:500;
+    max-height:78px;overflow-y:auto;
+  }
+  .log p{margin:0 0 4px;display:flex;justify-content:space-between;gap:10px}
+  .log em{font-style:normal;font-weight:700;color:var(--ink)}
+
+  /* ---------- add mode ---------- */
+  .crosshair{
+    position:absolute;left:50%;top:50%;z-index:650;
+    transform:translate(-50%,-50%);pointer-events:none;display:none;
+  }
+  body.adding .crosshair{display:block}
+  .crosshair div{
+    width:34px;height:34px;border:3px solid var(--azulejo);
+    border-radius:99px;background:rgba(47,111,178,.16);
+  }
+  .addbar{
+    position:absolute;left:12px;right:12px;z-index:700;
+    bottom:calc(env(safe-area-inset-bottom) + 16px);
+    background:#fff;border:1px solid var(--line);border-radius:16px;
+    padding:12px;box-shadow:0 -4px 20px rgba(22,35,61,.14);
+    display:none;
+  }
+  body.adding .addbar{display:block}
+  .addbar p{margin:0 0 9px;font-size:12.5px;font-weight:600;color:var(--ink-soft)}
+  .addbar input{
+    width:100%;padding:11px 12px;font:inherit;font-size:15px;font-weight:500;
+    border:1.5px solid var(--line);border-radius:11px;background:var(--paper);
+    color:var(--ink);
+  }
+  .addbar .row{display:flex;gap:8px;margin-top:9px}
+  .addbar button{
+    flex:1;padding:11px;font:inherit;font-weight:700;font-size:14px;
+    border-radius:11px;border:1.5px solid var(--line);background:#fff;
+    color:var(--ink);cursor:pointer;
+  }
+  .addbar button.go{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+  /* ---------- toast ---------- */
+  .toast{
+    position:absolute;left:50%;z-index:900;
+    bottom:calc(var(--sheet-h) + env(safe-area-inset-bottom) + 74px);
+    transform:translate(-50%,10px);
+    background:var(--ink);color:#fff;font-size:12.5px;font-weight:600;
+    padding:9px 14px;border-radius:99px;white-space:nowrap;
+    opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+
+  :focus-visible{outline:2.5px solid var(--azulejo);outline-offset:2px}
+
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none!important;animation:none!important}
+  }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <h1>Cêntimo</h1>
+    <span>estado das máquinas, reportado por quem lá esteve</span>
+  </div>
+  <div class="tally" id="tally"></div>
+</header>
+
+<div class="crosshair"><div></div></div>
+
+<div class="fabs">
+  <button class="fab" id="locate" aria-label="Centrar na minha localização">◎</button>
+  <button class="fab primary" id="add" aria-label="Adicionar máquina">+</button>
+</div>
+
+<section class="sheet" id="sheet" aria-live="polite">
+  <div class="grip"></div>
+  <h2 id="s-name">—</h2>
+  <p class="meta" id="s-addr"></p>
+  <span class="state" id="s-state"></span>
+  <p class="ask">Estiveste lá agora?</p>
+  <div class="choices">
+    <button class="choice" data-s="ok"><u style="background:var(--ok)"></u>A funcionar</button>
+    <button class="choice" data-s="full"><u style="background:var(--full)"></u>Cheia</button>
+    <button class="choice" data-s="down"><u style="background:var(--down)"></u>Avariada</button>
+  </div>
+  <div class="log" id="s-log"></div>
+</section>
+
+<div class="addbar">
+  <p>Arrasta o mapa até a máquina ficar dentro do círculo.</p>
+  <input id="add-name" placeholder="Onde é? Ex.: Pingo Doce Areeiro" autocomplete="off">
+  <div class="row">
+    <button id="add-cancel">Cancelar</button>
+    <button class="go" id="add-save">Adicionar</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  var HOUR = 3600000;
+  var STALE_AFTER = 18 * HOUR;   // depois disto, o estado deixa de ser fiável
+  var KEY = "centimo.v1";
+
+  var LABEL = { ok:"A funcionar", full:"Cheia", down:"Avariada", stale:"Sem dados recentes" };
+  var COLOR = { ok:"#1F9E63", full:"#D9932B", down:"#D64545", stale:"#8C93A5" };
+  var GLYPH = { ok:"✓", full:"▲", down:"✕", stale:"?" };
+
+  /* ---------- dados semente (substituir pelo locator oficial) ---------- */
+  var SEED = [
+    ["Continente Bom Dia — Alvalade", 38.7530, -9.1400],
+    ["Pingo Doce — Areeiro",          38.7423, -9.1330],
+    ["Lidl — Av. de Roma",            38.7487, -9.1329],
+    ["Auchan — Alfragide",            38.7360, -9.2160],
+    ["Minipreço — Anjos",             38.7248, -9.1355],
+    ["Continente — Colombo",          38.7540, -9.1880],
+    ["Pingo Doce — Cais do Sodré",    38.7060, -9.1450],
+    ["Intermarché — Graça",           38.7195, -9.1300],
+    ["Lidl — Benfica",                38.7510, -9.2010],
+    ["Continente — Parque das Nações",38.7680, -9.0960]
+  ];
+
+  /* ---------- estado ---------- */
+  var machines = load() || SEED.map(function(s,i){
+    return {
+      id: "seed-" + i,
+      name: s[0],
+      lat: s[1],
+      lng: s[2],
+      reports: i % 3 === 0
+        ? [{ s:"ok",   at: Date.now() - (2 + i) * HOUR }]
+        : i % 3 === 1
+          ? [{ s:"full", at: Date.now() - (4 + i) * HOUR }]
+          : []
+    };
+  });
+
+  var selected = null;
+  var markers = {};
+
+  function save(){
+    try { localStorage.setItem(KEY, JSON.stringify(machines)); } catch(e){}
+  }
+  function load(){
+    try {
+      var raw = localStorage.getItem(KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch(e){ return null; }
+  }
+
+  /* ---------- lógica de estado ---------- */
+  function latest(m){
+    if(!m.reports || !m.reports.length) return null;
+    return m.reports[m.reports.length - 1];
+  }
+  function statusOf(m){
+    var r = latest(m);
+    if(!r) return "stale";
+    return (Date.now() - r.at) > STALE_AFTER ? "stale" : r.s;
+  }
+  function ago(ts){
+    var d = Date.now() - ts;
+    if(d < HOUR) return "há " + Math.max(1, Math.round(d / 60000)) + " min";
+    if(d < 24 * HOUR) return "há " + Math.round(d / HOUR) + " h";
+    return "há " + Math.round(d / (24 * HOUR)) + " d";
+  }
+
+  /* ---------- mapa ---------- */
+  var map = L.map("map", { zoomControl:false, attributionControl:true })
+             .setView([38.7380, -9.1450], 13);
+
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · dados de estado da comunidade'
+  }).addTo(map);
+
+  function icon(m){
+    var s = statusOf(m);
+    return L.divIcon({
+      className: "",
+      html: '<div class="pin' + (selected === m.id ? " is-sel" : "") +
+            '" data-s="' + s + '">' + GLYPH[s] + '</div>',
+      iconSize: [26,26],
+      iconAnchor: [13,13]
+    });
+  }
+
+  function draw(){
+    machines.forEach(function(m){
+      if(markers[m.id]){
+        markers[m.id].setIcon(icon(m));
+      } else {
+        var mk = L.marker([m.lat, m.lng], { icon: icon(m), keyboard:true })
+                  .addTo(map)
+                  .on("click", function(){ select(m.id); });
+        markers[m.id] = mk;
+      }
+    });
+    tally();
+  }
+
+  function tally(){
+    var c = { ok:0, full:0, down:0, stale:0 };
+    machines.forEach(function(m){ c[statusOf(m)]++; });
+    document.getElementById("tally").innerHTML =
+      '<b><i style="background:' + COLOR.ok   + '"></i>' + c.ok   + ' a funcionar</b>' +
+      '<b><i style="background:' + COLOR.full + '"></i>' + c.full + ' cheias</b>' +
+      '<b><i style="background:' + COLOR.down + '"></i>' + c.down + ' avariadas</b>';
+  }
+
+  /* ---------- painel ---------- */
+  var sheet = document.getElementById("sheet");
+
+  function sheetHeight(){
+    document.documentElement.style.setProperty(
+      "--sheet-h",
+      sheet.classList.contains("open") ? sheet.offsetHeight + "px" : "0px"
+    );
+  }
+
+  function select(id){
+    selected = id;
+    var m = machines.filter(function(x){ return x.id === id; })[0];
+    if(!m) return;
+
+    var s = statusOf(m), r = latest(m);
+
+    document.getElementById("s-name").textContent = m.name;
+    document.getElementById("s-addr").textContent =
+      m.lat.toFixed(4) + ", " + m.lng.toFixed(4);
+
+    var st = document.getElementById("s-state");
+    st.textContent = LABEL[s] + (r && s !== "stale" ? " · " + ago(r.at) : "");
+    st.style.background = COLOR[s];
+
+    var log = document.getElementById("s-log");
+    if(!m.reports || !m.reports.length){
+      log.innerHTML = "<p>Ainda ninguém reportou esta máquina.</p>";
+    } else {
+      log.innerHTML = m.reports.slice(-6).reverse().map(function(x){
+        return "<p><em>" + LABEL[x.s] + "</em><span>" + ago(x.at) + "</span></p>";
+      }).join("");
+    }
+
+    sheet.classList.add("open");
+    requestAnimationFrame(sheetHeight);
+    draw();
+    map.panTo([m.lat, m.lng], { animate:true });
+  }
+
+  function closeSheet(){
+    selected = null;
+    sheet.classList.remove("open");
+    sheetHeight();
+    draw();
+  }
+
+  map.on("click", closeSheet);
+
+  Array.prototype.forEach.call(document.querySelectorAll(".choice"), function(btn){
+    btn.addEventListener("click", function(){
+      var m = machines.filter(function(x){ return x.id === selected; })[0];
+      if(!m) return;
+      m.reports = (m.reports || []).concat([{ s: btn.dataset.s, at: Date.now() }]);
+      save();
+      select(m.id);
+      toast("Obrigado — estado atualizado");
+    });
+  });
+
+  /* ---------- adicionar máquina ---------- */
+  var nameInput = document.getElementById("add-name");
+
+  document.getElementById("add").addEventListener("click", function(){
+    closeSheet();
+    document.body.classList.add("adding");
+    nameInput.value = "";
+  });
+  document.getElementById("add-cancel").addEventListener("click", function(){
+    document.body.classList.remove("adding");
+  });
+  document.getElementById("add-save").addEventListener("click", function(){
+    var name = nameInput.value.trim();
+    if(!name){ nameInput.focus(); toast("Dá-lhe um nome para as pessoas a encontrarem"); return; }
+    var c = map.getCenter();
+    machines.push({
+      id: "u-" + Date.now(),
+      name: name,
+      lat: c.lat,
+      lng: c.lng,
+      reports: [{ s:"ok", at: Date.now() }]
+    });
+    save();
+    document.body.classList.remove("adding");
+    draw();
+    toast("Máquina adicionada");
+  });
+
+  /* ---------- localizar ---------- */
+  document.getElementById("locate").addEventListener("click", function(){
+    if(!navigator.geolocation){ toast("Localização indisponível neste dispositivo"); return; }
+    toast("A procurar-te…");
+    navigator.geolocation.getCurrentPosition(
+      function(p){ map.setView([p.coords.latitude, p.coords.longitude], 15); },
+      function(){ toast("Não consegui obter a localização"); },
+      { enableHighAccuracy:true, timeout:8000 }
+    );
+  });
+
+  /* ---------- toast ---------- */
+  var toastEl = document.getElementById("toast"), toastTimer;
+  function toast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ toastEl.classList.remove("show"); }, 2200);
+  }
+
+  window.addEventListener("resize", sheetHeight);
+  draw();
+})();
+</script>
+</body>
+</html>
