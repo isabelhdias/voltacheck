@@ -14,12 +14,12 @@ blocked and why, and what still needs Isabel.
 
 Roadmap, in priority order:
 
-1. Real seed data from the official locator (~2,500 machines). Sparse maps don't
-   retain anyone, so this is highest value.
+1. ~~Real seed data~~ — done. 2,444 machines imported from OpenStreetMap
+   (ODbL), covering the mainland, Madeira and the Azores.
 2. Rate limiting on reports — `reports_insert` currently accepts anything from
    anyone. Needs an Edge Function (device hash / IP) plus a proximity check.
-   Must land before the link is shared publicly.
-3. Search by town. Depends on a `town` column from step 1.
+   Must land before the link is shared publicly. **Now the top item.**
+3. Search by town. Unblocked — every machine has a `town` (concelho).
 
 ## Hard constraints
 
@@ -52,11 +52,16 @@ report look fresh.
 
 ## Files
 
-- `index.html` — the entire app: markup, styles, and script in one file.
-- `schema.sql` — Postgres schema for Supabase (machines, reports), RLS policies
-  allowing anonymous read and insert, and placeholder seed machines. Paste into
-  the Supabase SQL editor. Note the "Known gap" comment at the bottom.
-- `docs/seed-data-plan.md` — research and handover notes.
+- `index.html` — the entire app: markup, styles, and script in one file. The
+  `SEED` block near the top of the script is generated — don't edit it by hand.
+- `schema.sql` — Postgres schema for Supabase (machines, reports) and RLS
+  policies allowing anonymous read and insert. Paste into the Supabase SQL
+  editor; safe to re-run. Note the "Known gap" comment at the bottom.
+- `tools/import_osm.py` — the machine importer. Python 3 stdlib, no install.
+  Run it to refresh the data; it rewrites `seed/` and the `SEED` block.
+- `seed/machines.csv`, `seed/machines.sql` — generated. Load either one into
+  Supabase.
+- `docs/seed-data-plan.md` — where the data comes from and how to refresh it.
 
 ## Working style
 
