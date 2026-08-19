@@ -64,6 +64,10 @@ report look fresh.
 - `seed/machines.csv`, `seed/machines.sql` — generated. Load either one into
   Supabase.
 - `docs/seed-data-plan.md` — where the data comes from and how to refresh it.
+- `docs/rate-limiting-plan.md` — how report writes are guarded, and what that
+  does and doesn't stop.
+- `docs/supabase-setup.md` — the step-by-step for creating the project and
+  going from local mode to shared. Written for an iPad; no CLI.
 
 ## Working style
 
