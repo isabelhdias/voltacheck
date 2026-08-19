@@ -2780,24 +2780,44 @@
     }
   }
 
+  /* PostgREST caps how many rows one request returns (1000 on Supabase by
+     default), and there are ~2.400 machines. Without paging, live mode would
+     quietly show a fraction of the country. */
+  var PAGE = 1000;
+
+  async function pageAll(build){
+    var all = [], from = 0, res;
+    for(;;){
+      res = await build().range(from, from + PAGE - 1);
+      if(res.error) throw res.error;
+      all = all.concat(res.data);
+      if(res.data.length < PAGE) return all;
+      from += PAGE;
+    }
+  }
+
   async function pull(){
     var since = new Date(Date.now() - LOOKBACK_H * HOUR).toISOString();
 
-    var m = await db.from("machines").select("id,name,lat,lng,town,source");
-    if(m.error) throw m.error;
+    var mRows = await pageAll(function(){
+      return db.from("machines")
+               .select("id,name,lat,lng,town,source")
+               .order("id", { ascending:true });
+    });
 
-    var r = await db.from("reports")
-                    .select("machine_id,status,created_at")
-                    .gte("created_at", since)
-                    .order("created_at", { ascending:true });
-    if(r.error) throw r.error;
+    var rRows = await pageAll(function(){
+      return db.from("reports")
+               .select("machine_id,status,created_at")
+               .gte("created_at", since)
+               .order("created_at", { ascending:true });
+    });
 
     var byId = {};
-    m.data.forEach(function(x){
+    mRows.forEach(function(x){
       byId[x.id] = { id:x.id, name:x.name, lat:x.lat, lng:x.lng,
                      town:x.town || "", src:x.source || "user", reports:[] };
     });
-    r.data.forEach(function(x){
+    rRows.forEach(function(x){
       if(byId[x.machine_id]){
         byId[x.machine_id].reports.push({ s:x.status, at:new Date(x.created_at).getTime() });
       }

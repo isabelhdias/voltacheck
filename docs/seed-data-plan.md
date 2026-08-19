@@ -141,6 +141,18 @@ Two fixes went in alongside:
 3. **Search by town** — now the top item. `town` is populated for every
    machine and indexed.
 
+## A bug the real data exposed
+
+`pull()` fetched machines with a single unpaged request. PostgREST caps how
+many rows one request returns — 1000 by default on Supabase — so with 2.444
+machines, live mode would have quietly shown about 40% of the country.
+Nothing would have errored; the map would just have been wrong.
+
+It now pages through in blocks of 1000, for reports as well as machines — a
+busy 72-hour window can pass 1000 reports just as easily. This was invisible
+with ten placeholder machines and only became reachable once the real data
+landed.
+
 ## Still needs Isabel
 
 - Create the Supabase project, run `schema.sql`, load `seed/machines.csv`, and
