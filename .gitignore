@@ -1,0 +1,2 @@
+# Raw Overpass responses cached by tools/import_osm.py
+tools/.cache/
