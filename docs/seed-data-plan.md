@@ -138,14 +138,21 @@ Two fixes went in alongside:
    Postgres function (not an Edge Function — see
    `docs/rate-limiting-plan.md` for why) that rate-limits by device and IP and
    checks proximity to the machine before writing.
-3. **Search by town** — now the top item. `town` is populated for every
-   machine and indexed.
+3. ~~Search by town~~ — done. Matching runs in the browser against the
+   machines already in memory, so it works the same in local mode and live
+   mode and costs no extra request. The `lower(town)` index in `schema.sql`
+   is therefore unused for now; it is harmless, and it is what search would
+   need if this ever moves server-side.
+
+All three are done. The next real step is Isabel's: create the Supabase
+project, at which point the app goes from local mode to shared.
 
 ## A bug the real data exposed
 
 `pull()` fetched machines with a single unpaged request. PostgREST caps how
 many rows one request returns — 1000 by default on Supabase — so with 2.444
-machines, live mode would have quietly shown about 40% of the country.
+machines, live mode would have quietly shown about 40% of the country, and a
+town search would have come up empty for whichever towns fell off the end.
 Nothing would have errored; the map would just have been wrong.
 
 It now pages through in blocks of 1000, for reports as well as machines — a

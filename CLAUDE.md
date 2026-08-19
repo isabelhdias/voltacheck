@@ -20,8 +20,8 @@ Roadmap, in priority order:
    `public.report_machine()`, a Postgres function that rate-limits by device
    and IP and checks proximity to the machine; see
    `docs/rate-limiting-plan.md`.
-3. Search by town. Unblocked — every machine has a `town` (concelho).
-   **Now the top item.**
+3. ~~Search by town~~ — done. A box in the topbar matches concelhos as you
+   type, ignoring accents, and frames a town's machines on the map.
 
 ## Hard constraints
 

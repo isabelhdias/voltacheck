@@ -60,6 +60,33 @@
   }
   .tally i{width:7px;height:7px;border-radius:99px;font-style:normal}
 
+  .search{position:relative;margin-top:8px;pointer-events:auto}
+  .search input{
+    width:100%;padding:9px 13px;font:inherit;font-size:14px;font-weight:500;
+    border:1px solid var(--line);border-radius:99px;background:#fff;color:var(--ink);
+    -webkit-appearance:none;appearance:none;
+  }
+  .search input::placeholder{color:var(--ink-soft);font-weight:500}
+  .search input::-webkit-search-cancel-button{-webkit-appearance:none}
+  .results{
+    position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:650;
+    background:#fff;border:1px solid var(--line);border-radius:14px;
+    box-shadow:0 6px 20px rgba(22,35,61,.16);
+    max-height:46vh;overflow-y:auto;display:none;
+  }
+  .results.open{display:block}
+  .results button{
+    display:flex;width:100%;align-items:baseline;justify-content:space-between;gap:10px;
+    padding:10px 13px;font:inherit;font-size:14px;font-weight:600;color:var(--ink);
+    background:#fff;border:0;border-bottom:1px solid var(--line);
+    cursor:pointer;text-align:left;
+  }
+  .results button:last-child{border-bottom:0}
+  .results button:active{background:var(--paper)}
+  .results b{font-weight:700}
+  .results span{font-size:11.5px;font-weight:700;color:var(--ink-soft);white-space:nowrap}
+  .results p{margin:0;padding:11px 13px;font-size:12.5px;font-weight:500;color:var(--ink-soft)}
+
   .pin{
     display:grid;place-items:center;width:26px;height:26px;border-radius:99px;
     border:2.5px solid #fff;box-shadow:0 2px 5px rgba(22,35,61,.32);
@@ -171,6 +198,11 @@
   <div class="brand">
     <h1>Cêntimo</h1>
     <span class="mode" id="mode">a ligar…</span>
+  </div>
+  <div class="search">
+    <input id="q" type="search" autocomplete="off" autocapitalize="off" spellcheck="false"
+           placeholder="Procurar por concelho" aria-label="Procurar máquinas por concelho">
+    <div class="results" id="results"></div>
   </div>
   <div class="tally" id="tally"></div>
 </header>
@@ -2782,7 +2814,8 @@
 
   /* PostgREST caps how many rows one request returns (1000 on Supabase by
      default), and there are ~2.400 machines. Without paging, live mode would
-     quietly show a fraction of the country. */
+     quietly show a fraction of the country and a town search would come up
+     empty for the towns that fell off the end. */
   var PAGE = 1000;
 
   async function pageAll(build){
@@ -3027,6 +3060,123 @@
 
   map.on("click", closeSheet);
   map.on("moveend", draw);
+
+  /* ───────── procura por concelho ───────── */
+
+  var qInput = document.getElementById("q");
+  var qResults = document.getElementById("results");
+
+  /* "Braganca" has to find "Bragança", and "sao" has to find "São". Strip the
+     accents off both sides rather than asking people to type them. */
+  function norm(str){
+    return (str || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  }
+
+  /* Group the machines by concelho, keeping each one's bounds so picking a
+     result can frame every machine in that town. */
+  function townsMatching(term){
+    var t = norm(term);
+    if(!t) return [];
+
+    var by = {};
+    machines.forEach(function(m){
+      if(!m.town) return;
+      var g = by[m.town];
+      if(!g){
+        g = by[m.town] = { town:m.town, n:0, s:m.lat, n_:m.lat, w:m.lng, e:m.lng };
+      }
+      g.n++;
+      if(m.lat < g.s)  g.s  = m.lat;
+      if(m.lat > g.n_) g.n_ = m.lat;
+      if(m.lng < g.w)  g.w  = m.lng;
+      if(m.lng > g.e)  g.e  = m.lng;
+    });
+
+    var hits = [];
+    Object.keys(by).forEach(function(k){
+      var at = norm(k).indexOf(t);
+      if(at >= 0) hits.push({ g:by[k], at:at });
+    });
+
+    /* Towns that start with what you typed come first. */
+    hits.sort(function(a, b){
+      if(a.at !== b.at) return a.at - b.at;
+      return a.g.town.localeCompare(b.g.town, "pt");
+    });
+
+    return hits.slice(0, 8).map(function(h){ return h.g; });
+  }
+
+  function goToTown(g){
+    closeSheet();
+    qInput.value = g.town;
+    qInput.blur();
+    qResults.classList.remove("open");
+
+    if(g.s === g.n_ && g.w === g.e){
+      map.setView([g.s, g.w], 16);
+    } else {
+      /* Keep the framed machines clear of the topbar. */
+      map.fitBounds([[g.s, g.w], [g.n_, g.e]], {
+        paddingTopLeft:[28, 128], paddingBottomRight:[28, 44], maxZoom:15
+      });
+    }
+  }
+
+  function renderResults(){
+    qResults.textContent = "";
+
+    if(!qInput.value.trim()){
+      qResults.classList.remove("open");
+      return;
+    }
+
+    var list = townsMatching(qInput.value);
+
+    if(!list.length){
+      var none = document.createElement("p");
+      none.textContent = "Nenhum concelho com esse nome.";
+      qResults.appendChild(none);
+    } else {
+      list.forEach(function(g){
+        var row = document.createElement("button");
+        row.type = "button";
+
+        var name = document.createElement("b");
+        name.textContent = g.town;
+
+        var count = document.createElement("span");
+        count.textContent = g.n + (g.n === 1 ? " máquina" : " máquinas");
+
+        row.appendChild(name);
+        row.appendChild(count);
+        row.addEventListener("click", function(){ goToTown(g); });
+        qResults.appendChild(row);
+      });
+    }
+
+    qResults.classList.add("open");
+  }
+
+  qInput.addEventListener("input", renderResults);
+  qInput.addEventListener("focus", renderResults);
+
+  qInput.addEventListener("keydown", function(e){
+    if(e.key === "Escape"){
+      qInput.value = "";
+      qResults.classList.remove("open");
+      qInput.blur();
+    } else if(e.key === "Enter"){
+      var list = townsMatching(qInput.value);
+      if(list.length) goToTown(list[0]);
+    }
+  });
+
+  document.addEventListener("click", function(e){
+    if(!e.target || !e.target.closest || !e.target.closest(".search")){
+      qResults.classList.remove("open");
+    }
+  });
 
   var choiceBtns = Array.prototype.slice.call(document.querySelectorAll(".choice"));
 
