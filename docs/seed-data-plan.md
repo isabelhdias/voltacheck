@@ -134,12 +134,12 @@ Two fixes went in alongside:
 ## Roadmap
 
 1. ~~Seed data~~ — done.
-2. **Rate limiting** — `reports_insert` still accepts anything from anyone.
-   Needs a Supabase Edge Function checking device hash / IP, plus a proximity
-   check so a machine can only be reported from nearby. Unblocked; must land
-   before the link is shared publicly.
-3. **Search by town** — now unblocked. `town` is populated for every machine
-   and indexed.
+2. ~~Rate limiting~~ — done. Reports go through `public.report_machine()`, a
+   Postgres function (not an Edge Function — see
+   `docs/rate-limiting-plan.md` for why) that rate-limits by device and IP and
+   checks proximity to the machine before writing.
+3. **Search by town** — now the top item. `town` is populated for every
+   machine and indexed.
 
 ## Still needs Isabel
 

@@ -16,10 +16,12 @@ Roadmap, in priority order:
 
 1. ~~Real seed data~~ — done. 2,444 machines imported from OpenStreetMap
    (ODbL), covering the mainland, Madeira and the Azores.
-2. Rate limiting on reports — `reports_insert` currently accepts anything from
-   anyone. Needs an Edge Function (device hash / IP) plus a proximity check.
-   Must land before the link is shared publicly. **Now the top item.**
+2. ~~Rate limiting on reports~~ — done. Writes go through
+   `public.report_machine()`, a Postgres function that rate-limits by device
+   and IP and checks proximity to the machine; see
+   `docs/rate-limiting-plan.md`.
 3. Search by town. Unblocked — every machine has a `town` (concelho).
+   **Now the top item.**
 
 ## Hard constraints
 

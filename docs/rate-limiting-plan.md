@@ -443,11 +443,12 @@ Be honest about this when describing it to anyone.
   and one supermarket's public wifi put many genuine people behind one address.
   That is why the IP limit is 300/hour and not 20 — a tight IP limit would lock
   out real reporters at exactly the moment a machine gets busy.
-- **Rejected attempts are free.** The counter row is written in the same
-  transaction as the report, so a rejection rolls it back. Someone hammering a
-  rejected endpoint stays rejected but is never escalated or locked out. Making
-  rejections stick would need an autonomous transaction (`pg_net`, `dblink`) —
-  not worth the complexity here.
+- **Rejected attempts are free.** The function returns as soon as it hits a
+  `cooldown`/`flood`/`far`/`unknown`/`invalid` case, before either insert —
+  no counter row is written for a rejection, not even one that gets rolled
+  back. Someone hammering a rejected endpoint stays rejected but is never
+  escalated or locked out. Making rejections stick would need deliberately
+  counting them too, which is not worth the complexity here.
 - **Reads are still wide open.** `reports_read` and `machines_read` are
   `using (true)`. Nothing here limits scraping, and nothing here rate-limits
   `machines_insert` — someone can still add junk machines. Worth doing next,
