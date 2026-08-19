@@ -35,42 +35,34 @@
     overscroll-behavior:none;
   }
 
-  /* ---------- map ---------- */
   #map{position:absolute;inset:0;background:#E7EAE6}
   .leaflet-container{font-family:inherit}
   .leaflet-control-attribution{font-size:9px;background:rgba(242,244,241,.82)}
 
-  /* ---------- header ---------- */
   .topbar{
     position:absolute;top:0;left:0;right:0;z-index:600;
     padding:calc(env(safe-area-inset-top) + 10px) 12px 10px;
     background:linear-gradient(180deg,var(--paper) 62%,rgba(242,244,241,0));
     pointer-events:none;
   }
-  .brand{display:flex;align-items:baseline;gap:8px}
-  .brand h1{
-    margin:0;font-size:19px;font-weight:800;letter-spacing:-.03em;
+  .brand{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+  .brand h1{margin:0;font-size:19px;font-weight:800;letter-spacing:-.03em}
+  .mode{
+    pointer-events:auto;font-size:9.5px;font-weight:800;letter-spacing:.06em;
+    text-transform:uppercase;padding:2.5px 7px;border-radius:99px;
+    border:1px solid var(--line);background:#fff;color:var(--ink-soft);
   }
-  .brand span{
-    font-size:11px;font-weight:500;color:var(--ink-soft);letter-spacing:.01em;
-  }
-  .tally{
-    display:flex;gap:6px;margin-top:8px;pointer-events:auto;
-    font-size:11px;font-weight:700;
-  }
+  .mode[data-live="1"]{color:var(--ok);border-color:rgba(31,158,99,.35)}
+  .tally{display:flex;gap:6px;margin-top:8px;pointer-events:auto;font-size:11px;font-weight:700}
   .tally b{
     display:inline-flex;align-items:center;gap:5px;
-    background:#fff;border:1px solid var(--line);border-radius:99px;
-    padding:4px 9px;font-weight:700;
+    background:#fff;border:1px solid var(--line);border-radius:99px;padding:4px 9px;
   }
   .tally i{width:7px;height:7px;border-radius:99px;font-style:normal}
 
-  /* ---------- pins ---------- */
   .pin{
-    display:grid;place-items:center;
-    width:26px;height:26px;border-radius:99px;
-    border:2.5px solid #fff;
-    box-shadow:0 2px 5px rgba(22,35,61,.32);
+    display:grid;place-items:center;width:26px;height:26px;border-radius:99px;
+    border:2.5px solid #fff;box-shadow:0 2px 5px rgba(22,35,61,.32);
     font-size:13px;line-height:1;font-weight:800;color:#fff;
   }
   .pin[data-s="ok"]{background:var(--ok)}
@@ -79,12 +71,10 @@
   .pin[data-s="stale"]{background:var(--stale)}
   .pin.is-sel{transform:scale(1.28);z-index:9999}
 
-  /* ---------- floating buttons ---------- */
   .fabs{
     position:absolute;right:12px;z-index:600;
     bottom:calc(var(--sheet-h) + env(safe-area-inset-bottom) + 16px);
-    display:flex;flex-direction:column;gap:8px;
-    transition:bottom .22s ease;
+    display:flex;flex-direction:column;gap:8px;transition:bottom .22s ease;
   }
   .fab{
     width:46px;height:46px;border-radius:14px;border:1px solid var(--line);
@@ -93,55 +83,44 @@
     box-shadow:0 3px 10px rgba(22,35,61,.14);
   }
   .fab.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .fab[disabled]{opacity:.5}
 
-  /* ---------- bottom sheet ---------- */
   .sheet{
     position:absolute;left:0;right:0;bottom:0;z-index:700;
-    background:#fff;border-top:1px solid var(--line);
-    border-radius:20px 20px 0 0;
+    background:#fff;border-top:1px solid var(--line);border-radius:20px 20px 0 0;
     padding:14px 16px calc(env(safe-area-inset-bottom) + 16px);
     box-shadow:0 -6px 26px rgba(22,35,61,.16);
     transform:translateY(102%);transition:transform .24s cubic-bezier(.3,.8,.4,1);
   }
   .sheet.open{transform:translateY(0)}
-  .sheet .grip{
-    width:36px;height:4px;border-radius:99px;background:var(--line);
-    margin:0 auto 12px;
-  }
+  .sheet .grip{width:36px;height:4px;border-radius:99px;background:var(--line);margin:0 auto 12px}
   .sheet h2{margin:0;font-size:17px;font-weight:800;letter-spacing:-.02em;line-height:1.25}
   .meta{margin:5px 0 0;font-size:12px;color:var(--ink-soft);font-weight:500}
   .state{
-    display:inline-flex;align-items:center;gap:6px;
-    font-weight:700;font-size:12px;margin-top:10px;
-    padding:4px 9px;border-radius:99px;color:#fff;
+    display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:12px;
+    margin-top:10px;padding:4px 9px;border-radius:99px;color:#fff;
   }
-
   .ask{
-    margin:14px 0 0;font-size:11px;font-weight:700;
-    text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);
+    margin:14px 0 0;font-size:11px;font-weight:700;text-transform:uppercase;
+    letter-spacing:.08em;color:var(--ink-soft);
   }
   .choices{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
   .choice{
     border:1.5px solid var(--line);background:#fff;border-radius:13px;
-    padding:11px 6px;font:inherit;font-weight:700;font-size:12.5px;
-    color:var(--ink);cursor:pointer;line-height:1.3;
-    display:flex;flex-direction:column;align-items:center;gap:6px;
+    padding:11px 6px;font:inherit;font-weight:700;font-size:12.5px;color:var(--ink);
+    cursor:pointer;line-height:1.3;display:flex;flex-direction:column;align-items:center;gap:6px;
   }
   .choice u{width:11px;height:11px;border-radius:99px;text-decoration:none}
   .choice:active{transform:scale(.96)}
-  .choice[data-s="ok"]:hover{border-color:var(--ok)}
-  .choice[data-s="full"]:hover{border-color:var(--full)}
-  .choice[data-s="down"]:hover{border-color:var(--down)}
+  .choice[disabled]{opacity:.5}
 
   .log{
     margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line);
-    font-size:11.5px;color:var(--ink-soft);font-weight:500;
-    max-height:78px;overflow-y:auto;
+    font-size:11.5px;color:var(--ink-soft);font-weight:500;max-height:78px;overflow-y:auto;
   }
   .log p{margin:0 0 4px;display:flex;justify-content:space-between;gap:10px}
   .log em{font-style:normal;font-weight:700;color:var(--ink)}
 
-  /* ---------- add mode ---------- */
   .crosshair{
     position:absolute;left:50%;top:50%;z-index:650;
     transform:translate(-50%,-50%);pointer-events:none;display:none;
@@ -154,41 +133,34 @@
   .addbar{
     position:absolute;left:12px;right:12px;z-index:700;
     bottom:calc(env(safe-area-inset-bottom) + 16px);
-    background:#fff;border:1px solid var(--line);border-radius:16px;
-    padding:12px;box-shadow:0 -4px 20px rgba(22,35,61,.14);
-    display:none;
+    background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px;
+    box-shadow:0 -4px 20px rgba(22,35,61,.14);display:none;
   }
   body.adding .addbar{display:block}
   .addbar p{margin:0 0 9px;font-size:12.5px;font-weight:600;color:var(--ink-soft)}
   .addbar input{
     width:100%;padding:11px 12px;font:inherit;font-size:15px;font-weight:500;
-    border:1.5px solid var(--line);border-radius:11px;background:var(--paper);
-    color:var(--ink);
+    border:1.5px solid var(--line);border-radius:11px;background:var(--paper);color:var(--ink);
   }
   .addbar .row{display:flex;gap:8px;margin-top:9px}
   .addbar button{
-    flex:1;padding:11px;font:inherit;font-weight:700;font-size:14px;
-    border-radius:11px;border:1.5px solid var(--line);background:#fff;
-    color:var(--ink);cursor:pointer;
+    flex:1;padding:11px;font:inherit;font-weight:700;font-size:14px;border-radius:11px;
+    border:1.5px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;
   }
   .addbar button.go{background:var(--ink);color:#fff;border-color:var(--ink)}
 
-  /* ---------- toast ---------- */
   .toast{
     position:absolute;left:50%;z-index:900;
     bottom:calc(var(--sheet-h) + env(safe-area-inset-bottom) + 74px);
     transform:translate(-50%,10px);
     background:var(--ink);color:#fff;font-size:12.5px;font-weight:600;
-    padding:9px 14px;border-radius:99px;white-space:nowrap;
+    padding:9px 14px;border-radius:99px;max-width:86vw;text-align:center;
     opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;
   }
   .toast.show{opacity:1;transform:translate(-50%,0)}
 
   :focus-visible{outline:2.5px solid var(--azulejo);outline-offset:2px}
-
-  @media (prefers-reduced-motion:reduce){
-    *{transition:none!important;animation:none!important}
-  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
 <body>
@@ -198,7 +170,7 @@
 <header class="topbar">
   <div class="brand">
     <h1>Cêntimo</h1>
-    <span>estado das máquinas, reportado por quem lá esteve</span>
+    <span class="mode" id="mode">a ligar…</span>
   </div>
   <div class="tally" id="tally"></div>
 </header>
@@ -215,7 +187,7 @@
   <h2 id="s-name">—</h2>
   <p class="meta" id="s-addr"></p>
   <span class="state" id="s-state"></span>
-  <p class="ask">Estiveste lá agora?</p>
+  <p class="ask" id="s-ask">Estiveste lá agora?</p>
   <div class="choices">
     <button class="choice" data-s="ok"><u style="background:var(--ok)"></u>A funcionar</button>
     <button class="choice" data-s="full"><u style="background:var(--full)"></u>Cheia</button>
@@ -236,19 +208,29 @@
 <div class="toast" id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 (function(){
   "use strict";
 
+  /* ═══════════════════════════════════════════════════════
+     CONFIG — paste your two Supabase values between the quotes.
+     Supabase → Project Settings → Data API
+     Leave them empty and the app runs in local mode.
+     ═══════════════════════════════════════════════════════ */
+  var SUPABASE_URL      = "";
+  var SUPABASE_ANON_KEY = "";
+  /* ═══════════════════════════════════════════════════════ */
+
   var HOUR = 3600000;
-  var STALE_AFTER = 18 * HOUR;   // depois disto, o estado deixa de ser fiável
+  var STALE_AFTER = 18 * HOUR;      // report decays to grey after this
+  var LOOKBACK_H = 72;              // how far back to pull reports
   var KEY = "centimo.v1";
 
   var LABEL = { ok:"A funcionar", full:"Cheia", down:"Avariada", stale:"Sem dados recentes" };
   var COLOR = { ok:"#1F9E63", full:"#D9932B", down:"#D64545", stale:"#8C93A5" };
   var GLYPH = { ok:"✓", full:"▲", down:"✕", stale:"?" };
 
-  /* ---------- dados semente (substituir pelo locator oficial) ---------- */
   var SEED = [
     ["Continente Bom Dia — Alvalade", 38.7530, -9.1400],
     ["Pingo Doce — Areeiro",          38.7423, -9.1330],
@@ -262,38 +244,99 @@
     ["Continente — Parque das Nações",38.7680, -9.0960]
   ];
 
-  /* ---------- estado ---------- */
-  var machines = load() || SEED.map(function(s,i){
-    return {
-      id: "seed-" + i,
-      name: s[0],
-      lat: s[1],
-      lng: s[2],
-      reports: i % 3 === 0
-        ? [{ s:"ok",   at: Date.now() - (2 + i) * HOUR }]
-        : i % 3 === 1
-          ? [{ s:"full", at: Date.now() - (4 + i) * HOUR }]
-          : []
-    };
-  });
+  var db = null, live = false;
+  var machines = [], selected = null, markers = {};
 
-  var selected = null;
-  var markers = {};
+  /* ───────── storage ───────── */
 
-  function save(){
-    try { localStorage.setItem(KEY, JSON.stringify(machines)); } catch(e){}
-  }
-  function load(){
+  function localLoad(){
     try {
       var raw = localStorage.getItem(KEY);
       return raw ? JSON.parse(raw) : null;
     } catch(e){ return null; }
   }
+  function localSave(){
+    if(live) return;
+    try { localStorage.setItem(KEY, JSON.stringify(machines)); } catch(e){}
+  }
+  function localSeed(){
+    return SEED.map(function(s,i){
+      return { id:"seed-"+i, name:s[0], lat:s[1], lng:s[2], reports:[] };
+    });
+  }
 
-  /* ---------- lógica de estado ---------- */
+  function goLocal(msg){
+    live = false;
+    var badge = document.getElementById("mode");
+    badge.textContent = "modo local";
+    badge.dataset.live = "0";
+    badge.title = "Os reports ficam só neste dispositivo.";
+    machines = localLoad() || localSeed();
+    if(msg) toast(msg);
+  }
+
+  async function connect(){
+    if(!SUPABASE_URL || !SUPABASE_ANON_KEY || !window.supabase){
+      goLocal();
+      return;
+    }
+    try {
+      db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      await pull();
+      live = true;
+      var badge = document.getElementById("mode");
+      badge.textContent = "em direto";
+      badge.dataset.live = "1";
+      badge.title = "Reports partilhados com toda a gente.";
+    } catch(err){
+      goLocal("Sem ligação à base de dados — a mostrar dados locais");
+    }
+  }
+
+  async function pull(){
+    var since = new Date(Date.now() - LOOKBACK_H * HOUR).toISOString();
+
+    var m = await db.from("machines").select("id,name,lat,lng");
+    if(m.error) throw m.error;
+
+    var r = await db.from("reports")
+                    .select("machine_id,status,created_at")
+                    .gte("created_at", since)
+                    .order("created_at", { ascending:true });
+    if(r.error) throw r.error;
+
+    var byId = {};
+    m.data.forEach(function(x){
+      byId[x.id] = { id:x.id, name:x.name, lat:x.lat, lng:x.lng, reports:[] };
+    });
+    r.data.forEach(function(x){
+      if(byId[x.machine_id]){
+        byId[x.machine_id].reports.push({ s:x.status, at:new Date(x.created_at).getTime() });
+      }
+    });
+
+    machines = Object.keys(byId).map(function(k){ return byId[k]; });
+  }
+
+  async function pushReport(machineId, status){
+    if(!live) return true;
+    var res = await db.from("reports").insert({ machine_id: machineId, status: status });
+    return !res.error;
+  }
+
+  async function pushMachine(name, lat, lng){
+    if(!live) return { id: "u-" + Date.now() };
+    var res = await db.from("machines")
+                      .insert({ name: name, lat: lat, lng: lng })
+                      .select("id")
+                      .single();
+    return res.error ? null : res.data;
+  }
+
+  /* ───────── status logic ───────── */
+
   function latest(m){
-    if(!m.reports || !m.reports.length) return null;
-    return m.reports[m.reports.length - 1];
+    return (m.reports && m.reports.length) ? m.reports[m.reports.length - 1] : null;
   }
   function statusOf(m){
     var r = latest(m);
@@ -302,14 +345,17 @@
   }
   function ago(ts){
     var d = Date.now() - ts;
-    if(d < HOUR) return "há " + Math.max(1, Math.round(d / 60000)) + " min";
+    if(d < HOUR)      return "há " + Math.max(1, Math.round(d / 60000)) + " min";
     if(d < 24 * HOUR) return "há " + Math.round(d / HOUR) + " h";
     return "há " + Math.round(d / (24 * HOUR)) + " d";
   }
+  function find(id){
+    return machines.filter(function(x){ return x.id === id; })[0];
+  }
 
-  /* ---------- mapa ---------- */
-  var map = L.map("map", { zoomControl:false, attributionControl:true })
-             .setView([38.7380, -9.1450], 13);
+  /* ───────── map ───────── */
+
+  var map = L.map("map", { zoomControl:false }).setView([38.7380, -9.1450], 13);
 
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
@@ -322,8 +368,7 @@
       className: "",
       html: '<div class="pin' + (selected === m.id ? " is-sel" : "") +
             '" data-s="' + s + '">' + GLYPH[s] + '</div>',
-      iconSize: [26,26],
-      iconAnchor: [13,13]
+      iconSize:[26,26], iconAnchor:[13,13]
     });
   }
 
@@ -332,10 +377,9 @@
       if(markers[m.id]){
         markers[m.id].setIcon(icon(m));
       } else {
-        var mk = L.marker([m.lat, m.lng], { icon: icon(m), keyboard:true })
-                  .addTo(map)
-                  .on("click", function(){ select(m.id); });
-        markers[m.id] = mk;
+        markers[m.id] = L.marker([m.lat, m.lng], { icon: icon(m), keyboard:true })
+                          .addTo(map)
+                          .on("click", function(){ select(m.id); });
       }
     });
     tally();
@@ -350,39 +394,41 @@
       '<b><i style="background:' + COLOR.down + '"></i>' + c.down + ' avariadas</b>';
   }
 
-  /* ---------- painel ---------- */
+  /* ───────── sheet ───────── */
+
   var sheet = document.getElementById("sheet");
 
   function sheetHeight(){
     document.documentElement.style.setProperty(
-      "--sheet-h",
-      sheet.classList.contains("open") ? sheet.offsetHeight + "px" : "0px"
+      "--sheet-h", sheet.classList.contains("open") ? sheet.offsetHeight + "px" : "0px"
     );
   }
 
   function select(id){
     selected = id;
-    var m = machines.filter(function(x){ return x.id === id; })[0];
+    var m = find(id);
     if(!m) return;
 
     var s = statusOf(m), r = latest(m);
 
     document.getElementById("s-name").textContent = m.name;
-    document.getElementById("s-addr").textContent =
-      m.lat.toFixed(4) + ", " + m.lng.toFixed(4);
+    document.getElementById("s-addr").textContent = m.lat.toFixed(4) + ", " + m.lng.toFixed(4);
 
     var st = document.getElementById("s-state");
     st.textContent = LABEL[s] + (r && s !== "stale" ? " · " + ago(r.at) : "");
     st.style.background = COLOR[s];
 
+    document.getElementById("s-ask").textContent =
+      (r && s !== "stale" && Date.now() - r.at > 3 * HOUR)
+        ? "Ainda está assim?"
+        : "Estiveste lá agora?";
+
     var log = document.getElementById("s-log");
-    if(!m.reports || !m.reports.length){
-      log.innerHTML = "<p>Ainda ninguém reportou esta máquina.</p>";
-    } else {
-      log.innerHTML = m.reports.slice(-6).reverse().map(function(x){
-        return "<p><em>" + LABEL[x.s] + "</em><span>" + ago(x.at) + "</span></p>";
-      }).join("");
-    }
+    log.innerHTML = (!m.reports || !m.reports.length)
+      ? "<p>Ainda ninguém reportou esta máquina.</p>"
+      : m.reports.slice(-6).reverse().map(function(x){
+          return "<p><em>" + LABEL[x.s] + "</em><span>" + ago(x.at) + "</span></p>";
+        }).join("");
 
     sheet.classList.add("open");
     requestAnimationFrame(sheetHeight);
@@ -399,46 +445,73 @@
 
   map.on("click", closeSheet);
 
-  Array.prototype.forEach.call(document.querySelectorAll(".choice"), function(btn){
-    btn.addEventListener("click", function(){
-      var m = machines.filter(function(x){ return x.id === selected; })[0];
+  var choiceBtns = Array.prototype.slice.call(document.querySelectorAll(".choice"));
+
+  choiceBtns.forEach(function(btn){
+    btn.addEventListener("click", async function(){
+      var m = find(selected);
       if(!m) return;
-      m.reports = (m.reports || []).concat([{ s: btn.dataset.s, at: Date.now() }]);
-      save();
-      select(m.id);
-      toast("Obrigado — estado atualizado");
+
+      choiceBtns.forEach(function(b){ b.disabled = true; });
+
+      var ok = await pushReport(m.id, btn.dataset.s);
+
+      if(ok){
+        m.reports = (m.reports || []).concat([{ s: btn.dataset.s, at: Date.now() }]);
+        localSave();
+        select(m.id);
+        toast(live ? "Obrigado — toda a gente vê isto agora" : "Guardado neste dispositivo");
+      } else {
+        toast("Não consegui guardar. Tenta outra vez.");
+      }
+
+      choiceBtns.forEach(function(b){ b.disabled = false; });
     });
   });
 
-  /* ---------- adicionar máquina ---------- */
+  /* ───────── add machine ───────── */
+
   var nameInput = document.getElementById("add-name");
+  var saveBtn   = document.getElementById("add-save");
 
   document.getElementById("add").addEventListener("click", function(){
     closeSheet();
     document.body.classList.add("adding");
     nameInput.value = "";
   });
+
   document.getElementById("add-cancel").addEventListener("click", function(){
     document.body.classList.remove("adding");
   });
-  document.getElementById("add-save").addEventListener("click", function(){
+
+  saveBtn.addEventListener("click", async function(){
     var name = nameInput.value.trim();
-    if(!name){ nameInput.focus(); toast("Dá-lhe um nome para as pessoas a encontrarem"); return; }
+    if(name.length < 3){
+      nameInput.focus();
+      toast("Dá-lhe um nome para as pessoas a encontrarem");
+      return;
+    }
+
     var c = map.getCenter();
-    machines.push({
-      id: "u-" + Date.now(),
-      name: name,
-      lat: c.lat,
-      lng: c.lng,
-      reports: [{ s:"ok", at: Date.now() }]
-    });
-    save();
-    document.body.classList.remove("adding");
-    draw();
-    toast("Máquina adicionada");
+    saveBtn.disabled = true;
+
+    var row = await pushMachine(name, c.lat, c.lng);
+
+    if(row){
+      machines.push({ id: row.id, name: name, lat: c.lat, lng: c.lng, reports: [] });
+      localSave();
+      document.body.classList.remove("adding");
+      draw();
+      toast("Máquina adicionada");
+    } else {
+      toast("Não consegui adicionar. Verifica a ligação.");
+    }
+
+    saveBtn.disabled = false;
   });
 
-  /* ---------- localizar ---------- */
+  /* ───────── locate ───────── */
+
   document.getElementById("locate").addEventListener("click", function(){
     if(!navigator.geolocation){ toast("Localização indisponível neste dispositivo"); return; }
     toast("A procurar-te…");
@@ -449,17 +522,26 @@
     );
   });
 
-  /* ---------- toast ---------- */
+  /* ───────── toast ───────── */
+
   var toastEl = document.getElementById("toast"), toastTimer;
   function toast(msg){
     toastEl.textContent = msg;
     toastEl.classList.add("show");
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function(){ toastEl.classList.remove("show"); }, 2200);
+    toastTimer = setTimeout(function(){ toastEl.classList.remove("show"); }, 2400);
   }
 
   window.addEventListener("resize", sheetHeight);
-  draw();
+
+  /* refresh when the app returns to the foreground */
+  document.addEventListener("visibilitychange", async function(){
+    if(document.visibilityState === "visible" && live){
+      try { await pull(); draw(); if(selected) select(selected); } catch(e){}
+    }
+  });
+
+  connect().then(draw);
 })();
 </script>
 </body>
