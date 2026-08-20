@@ -67,6 +67,7 @@ saveBtn.addEventListener("click", async function(){
                            town: "", chain: "Outras", src: "user", reports: [] });
     store.localSave();
     document.body.classList.remove("adding");
+    ui.buildTally();
     draw();
     ui.toast("Máquina adicionada");
   } else {
@@ -82,7 +83,14 @@ document.getElementById("locate").addEventListener("click", function(){
   if(!navigator.geolocation){ ui.toast("Localização indisponível neste dispositivo"); return; }
   ui.toast("A procurar-te…");
   navigator.geolocation.getCurrentPosition(
-    function(p){ map.setView([p.coords.latitude, p.coords.longitude], 15); },
+    function(p){
+      store.setUserPos({ lat:p.coords.latitude, lng:p.coords.longitude });
+      map.setView([p.coords.latitude, p.coords.longitude], 15);
+      draw();
+      // Refreshes the open sheet, if any, so its distance line appears
+      // without waiting for the next tap.
+      if(store.selected) ui.select(store.selected);
+    },
     function(){ ui.toast("Não consegui obter a localização"); },
     { enableHighAccuracy:true, timeout:8000 }
   );
@@ -96,6 +104,7 @@ document.addEventListener("visibilitychange", async function(){
     try {
       await api.pull();
       ui.buildChainChips();
+      ui.buildTally();
       draw();
       if(store.selected) ui.select(store.selected);
     } catch(e){}
@@ -104,5 +113,6 @@ document.addEventListener("visibilitychange", async function(){
 
 connect().then(function(){
   ui.buildChainChips();
+  ui.buildTally();
   draw();
 });

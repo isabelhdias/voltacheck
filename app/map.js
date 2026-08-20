@@ -1,8 +1,12 @@
-// Leaflet map: tile layer, pins, viewport culling, the tally strip.
+// Leaflet map: tile layer, pins, viewport culling.
+//
+// The tally strip moved to app/ui.js — once it became a status filter with
+// click handlers and closeSheet()/toast-style wiring, it fit ui.js's existing
+// job (DOM controls + filter state) better than map.js's (Leaflet + pins).
 
-import { MAX_PINS, GLYPH, COLOR } from './config.js';
+import { MAX_PINS, GLYPH } from './config.js';
 import * as store from './store.js';
-import { statusOf, filterByChain } from './domain.js';
+import { statusOf, filterByChain, filterByStatus, sortByDistance } from './domain.js';
 
 export var map = L.map("map", { zoomControl:false }).setView([38.7380, -9.1450], 13);
 
@@ -26,21 +30,35 @@ function icon(m, now){
   });
 }
 
+// The machines that pass the current chain + status filters, before any
+// viewport cropping. This is also what "does this filter combination show
+// anything at all" (app/ui.js's empty-state message) has to check against —
+// it has to be the nationwide count, not what happens to be on screen, or
+// panning to an empty corner of the map would look like the same dead end.
+export function filtered(now){
+  return filterByStatus(filterByChain(store.machines, store.activeChain), store.activeStatuses, now);
+}
+
 /* With ~2.400 máquinas on the map, one marker each is more DOM than a phone
    can pan smoothly. Draw only what is on screen, and cap it — zoomed out to
-   the whole country, a few thousand pins say nothing anyway. */
+   the whole country, a few thousand pins say nothing anyway. Prefer the
+   machines nearest the user when their position is known (from locate),
+   falling back to nearest-to-map-centre when it isn't. */
 
-export function onScreen(){
+export function onScreen(now){
   var b = map.getBounds().pad(0.2);
-  var list = filterByChain(store.machines, store.activeChain)
-    .filter(function(m){ return b.contains([m.lat, m.lng]); });
+  var list = filtered(now).filter(function(m){ return b.contains([m.lat, m.lng]); });
+
   if(list.length > MAX_PINS){
-    var c = map.getCenter();
-    list.sort(function(x, y){
-      return ((x.lat-c.lat)*(x.lat-c.lat) + (x.lng-c.lng)*(x.lng-c.lng)) -
-             ((y.lat-c.lat)*(y.lat-c.lat) + (y.lng-c.lng)*(y.lng-c.lng));
-    });
-    list = list.slice(0, MAX_PINS);
+    if(store.userPos){
+      list = sortByDistance(list, store.userPos).slice(0, MAX_PINS);
+    } else {
+      var c = map.getCenter();
+      list = list.slice().sort(function(x, y){
+        return ((x.lat-c.lat)*(x.lat-c.lat) + (x.lng-c.lng)*(x.lng-c.lng)) -
+               ((y.lat-c.lat)*(y.lat-c.lat) + (y.lng-c.lng)*(y.lng-c.lng));
+      }).slice(0, MAX_PINS);
+    }
   }
   var sel = store.selected && store.find(store.selected);
   if(sel && list.indexOf(sel) === -1) list.push(sel);
@@ -53,7 +71,7 @@ export function draw(){
   var now = Date.now();
   var wanted = {};
 
-  onScreen().forEach(function(m){
+  onScreen(now).forEach(function(m){
     wanted[m.id] = true;
     var key = statusOf(m, now) + (store.selected === m.id ? "!" : "");
     var mk = markers[m.id];
@@ -74,16 +92,4 @@ export function draw(){
       delete markers[id];
     }
   });
-
-  tally();
-}
-
-export function tally(){
-  var now = Date.now();
-  var c = { ok:0, full:0, down:0, stale:0 };
-  filterByChain(store.machines, store.activeChain).forEach(function(m){ c[statusOf(m, now)]++; });
-  document.getElementById("tally").innerHTML =
-    '<b><i style="background:' + COLOR.ok   + '"></i>' + c.ok   + ' a funcionar</b>' +
-    '<b><i style="background:' + COLOR.full + '"></i>' + c.full + ' cheias</b>' +
-    '<b><i style="background:' + COLOR.down + '"></i>' + c.down + ' avariadas</b>';
 }

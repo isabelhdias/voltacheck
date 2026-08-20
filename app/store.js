@@ -13,10 +13,22 @@ export var selected = null;
 export var live = false;
 export var activeChain = null;   // null = "Todas"
 
+// Every status shown by default — the same map you'd see with no filter
+// touched at all. Never persisted (see localSave()) and never written to on
+// its own; only a tap on a tally toggle, or a "Limpar filtros" reset, moves it.
+export var activeStatuses = ["ok", "full", "down", "stale"];
+
+// {lat,lng} once the locate button gets a fix; null until then. Local mode
+// keeps this null until the user actually taps locate — nothing here calls
+// the geolocation API on its own.
+export var userPos = null;
+
 export function setMachines(list){ machines = list; }
 export function setSelected(id){ selected = id; }
 export function setLive(v){ live = v; }
 export function setActiveChain(v){ activeChain = v; }
+export function setActiveStatuses(v){ activeStatuses = v; }
+export function setUserPos(v){ userPos = v; }
 
 export function find(id){
   return machines.filter(function(x){ return x.id === id; })[0];

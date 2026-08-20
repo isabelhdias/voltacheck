@@ -53,6 +53,12 @@
     border:1px solid var(--line);background:#fff;color:var(--ink-soft);
   }
   .mode[data-live="1"]{color:var(--ok);border-color:rgba(31,158,99,.35)}
+  .filterbadge{
+    pointer-events:auto;font:inherit;font-size:9.5px;font-weight:800;letter-spacing:.06em;
+    text-transform:uppercase;padding:2.5px 7px;border-radius:99px;
+    border:1px solid var(--azulejo);background:#fff;color:var(--azulejo);cursor:pointer;
+  }
+  .filterbadge[hidden]{display:none}
   .chains{
     display:flex;gap:6px;margin-top:8px;pointer-events:auto;
     overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
@@ -65,11 +71,17 @@
   }
   .chains button[aria-pressed="true"]{background:var(--azulejo);border-color:var(--azulejo);color:#fff}
 
-  .tally{display:flex;gap:6px;margin-top:8px;pointer-events:auto;font-size:11px;font-weight:700}
-  .tally b{
-    display:inline-flex;align-items:center;gap:5px;
-    background:#fff;border:1px solid var(--line);border-radius:99px;padding:4px 9px;
+  .tally{
+    display:flex;gap:6px;margin-top:8px;pointer-events:auto;font-size:11px;font-weight:700;
+    overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
   }
+  .tally::-webkit-scrollbar{display:none}
+  .tally button{
+    flex:none;display:inline-flex;align-items:center;gap:5px;font:inherit;font-size:11px;font-weight:700;
+    min-height:44px;background:#fff;border:1px solid var(--line);border-radius:99px;
+    padding:4px 11px;color:var(--ink);cursor:pointer;white-space:nowrap;
+  }
+  .tally button[aria-pressed="false"]{opacity:.45}
   .tally i{width:7px;height:7px;border-radius:99px;font-style:normal}
 
   .search{position:relative;margin-top:8px;pointer-events:auto}
@@ -160,6 +172,19 @@
   .log p{margin:0 0 4px;display:flex;justify-content:space-between;gap:10px}
   .log em{font-style:normal;font-weight:700;color:var(--ink)}
 
+  .empty{
+    position:absolute;left:50%;top:50%;z-index:500;transform:translate(-50%,-50%);
+    background:#fff;border:1px solid var(--line);border-radius:14px;
+    padding:14px 16px;box-shadow:0 6px 20px rgba(22,35,61,.16);
+    text-align:center;max-width:80vw;
+  }
+  .empty[hidden]{display:none}
+  .empty p{margin:0 0 10px;font-size:13px;font-weight:600;color:var(--ink-soft)}
+  .empty button{
+    font:inherit;font-weight:700;font-size:13px;padding:8px 16px;border-radius:99px;
+    border:1.5px solid var(--azulejo);background:var(--azulejo);color:#fff;cursor:pointer;
+  }
+
   .crosshair{
     position:absolute;left:50%;top:50%;z-index:650;
     transform:translate(-50%,-50%);pointer-events:none;display:none;
@@ -210,6 +235,7 @@
   <div class="brand">
     <h1>Cêntimo</h1>
     <span class="mode" id="mode">a ligar…</span>
+    <button type="button" class="filterbadge" id="filterbadge" hidden>Filtros ativos · limpar</button>
   </div>
   <div class="search">
     <input id="q" type="search" autocomplete="off" autocapitalize="off" spellcheck="false"
@@ -219,6 +245,11 @@
   <div class="chains" id="chains"></div>
   <div class="tally" id="tally"></div>
 </header>
+
+<div class="empty" id="empty" hidden>
+  <p>Nenhuma máquina com este filtro.</p>
+  <button type="button" id="empty-clear">Limpar filtros</button>
+</div>
 
 <div class="crosshair"><div></div></div>
 
