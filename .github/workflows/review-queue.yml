@@ -1,0 +1,173 @@
+name: Review queue
+
+# Scheduled + on-demand. Machine submissions land in
+# public.machine_submissions with status = 'pending' and just sit there
+# until Isabel looks at the Supabase dashboard — which she has no reason to
+# do on spec, since she works entirely from a phone. This workflow is the
+# notification: it keeps a single GitHub issue, labelled review-queue, up
+# to date with whatever is waiting, and closes it the moment nothing is.
+# She already gets GitHub notifications on her phone, so the issue itself
+# is the alert — no new service, and it carries everything she needs to
+# judge a submission without opening Supabase first.
+#
+# Three times a day is plenty; she is not waiting on this by the minute.
+# 08:00 / 14:00 / 20:00 UTC lands at roughly morning / afternoon / evening
+# in Lisbon (UTC+0 in winter, UTC+1 in summer) without needing a DST-aware
+# cron. workflow_dispatch is here too, for "did my submission show up".
+on:
+  schedule:
+    - cron: "0 8,14,20 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  review-queue:
+    name: Review queue
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - name: Install postgresql-client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      # Reads the pending submissions and renders them straight to a body
+      # file — nothing SUPABASE_DB_URL-shaped ever lands in a step output or
+      # $GITHUB_ENV, only the finished markdown and a row count do.
+      #
+      # Fields come back separated by \x1f (ASCII unit separator) instead of
+      # a visible character like | or , because note and name are free text
+      # a submitter typed and could contain either. Newlines inside them are
+      # flattened with replace() for the same reason — one row, one line.
+      - name: Query pending submissions
+        id: query
+        run: |
+          rows=$(psql "$SUPABASE_DB_URL" -t -A -F $'\x1f' -c "
+            select
+              replace(name, chr(10), ' '),
+              coalesce(chain, 'sem cadeia'),
+              coalesce(town, 'sem localidade'),
+              coalesce(replace(note, chr(10), ' '), ''),
+              coalesce(near_name, ''),
+              coalesce(round(near_metres)::text, ''),
+              likely_dupe,
+              coalesce(round(from_metres)::text, ''),
+              coalesce(maps_url, ''),
+              to_char(created_at at time zone 'utc', 'YYYY-MM-DD HH24:MI')
+            from public.machine_submissions
+            where status = 'pending'
+            order by likely_dupe desc, created_at asc;
+          ")
+
+          count=$(psql "$SUPABASE_DB_URL" -t -A -c "select count(*) from public.machine_submissions where status = 'pending';")
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+          body_file="$RUNNER_TEMP/queue_body.md"
+
+          if [ "$count" = "0" ]; then
+            : > "$body_file"
+          else
+            if [ "$count" = "1" ]; then
+              echo "title=1 máquina para rever" >> "$GITHUB_OUTPUT"
+            else
+              echo "title=$count máquinas para rever" >> "$GITHUB_OUTPUT"
+            fi
+
+            {
+              echo "$count submissões pendentes de revisão, mais urgentes primeiro."
+              echo ""
+              echo "Para aprovar: muda \`status\` para \`approved\` na Table Editor do Supabase — o trigger trata do resto."
+              echo ""
+              echo "---"
+            } > "$body_file"
+
+            while IFS=$'\x1f' read -r name chain town note near_name near_metres likely_dupe from_metres maps_url created_at; do
+              marker=""
+              dupe_note=""
+              if [ "$likely_dupe" = "t" ]; then
+                marker="⚠ "
+                dupe_note=" — **possível duplicado**"
+              fi
+
+              if [ -n "$near_name" ]; then
+                near_line="🧭 A ${near_metres} m de **${near_name}**${dupe_note}"
+              else
+                near_line="🧭 Sem máquina próxima registada"
+              fi
+
+              if [ -n "$from_metres" ]; then
+                from_line="📍 Quem submeteu estava a ${from_metres} m da máquina"
+              else
+                from_line="📍 Sem localização de quem submeteu"
+              fi
+
+              {
+                echo ""
+                echo "### ${marker}${name} — ${chain} (${town})"
+                echo "- ${near_line}"
+                echo "- ${from_line}"
+                if [ -n "$note" ]; then
+                  echo "- Nota: ${note}"
+                fi
+                if [ -n "$maps_url" ]; then
+                  echo "- [Ver no mapa](${maps_url})"
+                fi
+                echo "- Submetida: ${created_at} UTC"
+                echo ""
+                echo "---"
+              } >> "$body_file"
+            done <<< "$rows"
+          fi
+
+          echo "body_file=$body_file" >> "$GITHUB_OUTPUT"
+
+      # Makes sure the label exists before it's used below — --force means
+      # this is a no-op (beyond refreshing colour/description) once the
+      # label is already there, so this step stays safe to run every time.
+      - name: Ensure the review-queue label exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create review-queue \
+            --repo "$GITHUB_REPOSITORY" \
+            --color "D9932B" \
+            --description "Submissões de máquinas por rever" \
+            --force
+
+      # Single issue, found by label rather than by number, so this step
+      # doesn't need to remember anything between runs. Empty queue closes
+      # whatever is open and stops — no comment, no noise, nothing pinging
+      # a phone for a queue that's already empty. A non-empty queue edits
+      # the existing issue in place if there is one, or opens a fresh one
+      # if not; either way there is at most one open review-queue issue.
+      - name: Sync the review-queue issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COUNT: ${{ steps.query.outputs.count }}
+          TITLE: ${{ steps.query.outputs.title }}
+          BODY_FILE: ${{ steps.query.outputs.body_file }}
+        run: |
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --label review-queue --state open --json number --jq '.[0].number')
+
+          if [ "$COUNT" = "0" ]; then
+            if [ -n "$existing" ]; then
+              gh issue close "$existing" --repo "$GITHUB_REPOSITORY" \
+                --comment "Fila vazia — não há submissões pendentes de momento."
+              echo "Closed review-queue issue #$existing (queue is empty)." >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "Queue is empty, no open issue to close. Nothing to do." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          else
+            if [ -n "$existing" ]; then
+              gh issue edit "$existing" --repo "$GITHUB_REPOSITORY" \
+                --title "$TITLE" --body-file "$BODY_FILE"
+              echo "Updated review-queue issue #$existing: $TITLE" >> "$GITHUB_STEP_SUMMARY"
+            else
+              gh issue create --repo "$GITHUB_REPOSITORY" \
+                --title "$TITLE" --body-file "$BODY_FILE" --label review-queue
+              echo "Opened a new review-queue issue: $TITLE" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
