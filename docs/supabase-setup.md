@@ -300,3 +300,43 @@ The app becomes genuinely shared, which changes one thing worth knowing: the
 rate limiting is now load-bearing, and it is a speed bump rather than a wall.
 `docs/rate-limiting-plan.md` has an honest account of what it does and does not
 stop. Worth reading before the link goes anywhere public.
+
+## Reviewing machine submissions
+
+When someone adds a machine that isn't on the map yet, it doesn't go straight
+into `machines` — it lands in `machine_submissions` with `status = 'pending'`
+and waits for you to look at it. Here's the whole loop, end to end.
+
+1. **Someone submits a machine.** The app writes a row to
+   `machine_submissions`, along with anything useful for judging it: how far
+   they were from the spot, the nearest machine already on the map and how
+   close it is, and whether that closeness makes it look like a duplicate.
+
+2. **A GitHub Action notices and opens an issue.** The `Review queue`
+   workflow runs a few times a day (and any time you run it by hand from the
+   **Actions** tab) and checks for pending submissions. If there are any, it
+   opens or updates a single GitHub issue titled with the count — something
+   like **"3 máquinas para rever"** — labelled `review-queue`. You'll get
+   that as a normal GitHub notification on your phone, the same way you get
+   everything else. If nothing is pending, it closes that issue and stays
+   silent — you should only ever hear from it when there's something to do.
+
+3. **You judge it from the issue.** No need to open Supabase first — the
+   issue lists each pending machine with its name, chain and town, the note
+   whoever submitted it left, how far the nearest existing machine is (with
+   its name), and a tappable link to a satellite view of the spot. Rows that
+   look like duplicates (under 75 m from something already mapped) are
+   marked with **⚠** and sorted to the top, then the rest oldest first.
+
+4. **You approve or reject in the Table Editor.** Open Supabase, **Table
+   Editor** → `machine_submissions`, find the row, and change `status` from
+   `pending` to `approved` or `rejected`. That's the only field you touch.
+
+5. **A trigger does the rest.** Approving a row fires a database trigger
+   that copies it into `machines`, so it shows up on the map without you
+   doing anything else. Rejecting one just leaves it marked `rejected` —
+   nothing is copied, nothing shows up.
+
+Once you've dealt with everything in the issue, the next scheduled run (or a
+manual **Run workflow** if you don't want to wait) sees the queue is empty
+and closes it on its own — you don't need to close it yourself.
