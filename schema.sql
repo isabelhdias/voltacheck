@@ -24,6 +24,7 @@ alter table machines add column if not exists external_id text;
 alter table machines add column if not exists town        text;
 alter table machines add column if not exists address     text;
 alter table machines add column if not exists source      text not null default 'user';
+alter table machines add column if not exists chain       text;
 
 -- external_id is the source's own identifier — 'osm:node/13722147127'. It is
 -- what makes re-importing safe: the importer upserts on it, so a second run
@@ -40,6 +41,14 @@ alter table machines add  constraint machines_source_check
 
 -- Search by town.
 create index if not exists machines_town on machines (lower(town));
+
+-- Filter by supermarket. Set once at import time by tools/import_osm.py from
+-- the machine's name — OSM carries no separate tag for which chain hosts a
+-- machine. Null for machines added through the app; the app buckets those
+-- (and any imported machine whose name didn't match a known chain) as
+-- "Outras". Not a foreign key: the chain list lives client-side and grows
+-- without a migration.
+create index if not exists machines_chain on machines (chain);
 
 -- `address` is here for a source that carries street addresses. OSM does not
 -- for these machines — the name ("Pingo Doce Altura") is the useful label —
