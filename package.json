@@ -1,0 +1,17 @@
+{
+  "name": "voltacheck",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Community map of Portugal's deposit-return machines. The app itself has no build step \u2014 this file exists only for tests.",
+  "type": "module",
+  "scripts": {
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "node --test test/unit/",
+    "test:e2e": "playwright test",
+    "serve": "http-server -p 8099 -s ."
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "leaflet": "1.9.4"
+  }
+}

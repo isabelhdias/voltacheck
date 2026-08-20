@@ -1,2 +1,7 @@
 # Raw Overpass responses cached by tools/import_osm.py
 tools/.cache/
+
+# Test tooling. The app itself still has no build step — these are dev-only.
+node_modules/
+test-results/
+playwright-report/
