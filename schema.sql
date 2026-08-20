@@ -82,21 +82,12 @@ drop policy if exists reports_read    on reports;
 create policy machines_read on machines
   for select using (true);
 
-create policy machines_insert on machines
-  for insert with check (
-    length(trim(name)) between 3 and 80
-    -- Mainland, Madeira, Azores. The old check was mainland only, which would
-    -- have rejected every one of the ~80 island machines.
-    and (
-         (lat between 36.80 and  42.25 and lng between  -9.62 and  -6.10)
-      or (lat between 32.30 and  33.20 and lng between -17.35 and -16.20)
-      or (lat between 36.85 and  39.90 and lng between -31.40 and -24.90)
-    )
-    -- Imported rows are the importer's to write, using the service key.
-    -- Nobody coming in on the anon key gets to claim one or forge an id.
-    and source = 'user'
-    and external_id is null
-  );
+-- machines_insert used to live here, letting anyone with the anon key add
+-- unlimited machines straight onto the map with no rate limit and no check
+-- at all — the permanent table was less protected than `reports`, which
+-- decays. It's gone; see "Machine submissions" below. New machines now go
+-- through public.submit_machine() into a review queue, and only an
+-- `approved` row becomes a real one.
 
 create policy reports_read on reports
   for select using (true);
@@ -280,17 +271,262 @@ drop policy if exists reports_insert on reports;
 revoke insert on table public.reports from anon, authenticated;
 
 -- ─────────────────────────────────────────────
+-- Machine submissions — manual review, not instant publish
+--
+-- machines_insert used to let anyone with the anon key add a permanent row
+-- straight onto the map, with no rate limit and no check beyond a bounding
+-- box and a name length — the permanent thing was less protected than
+-- `reports`, which decays. New machines now go into this queue instead, and
+-- only become a real `machines` row once a human sets status = 'approved'.
+--
+-- Reuses private.guard_secret / private.guard_hash from the report guard
+-- above — one salt, one hashing scheme, for both writers.
+-- ─────────────────────────────────────────────
+
+create table if not exists machine_submissions (
+  id           uuid primary key default gen_random_uuid(),
+  name         text not null,
+  chain        text,
+  note         text,
+  lat          double precision not null,
+  lng          double precision not null,
+  town         text,
+  from_lat     double precision,
+  from_lng     double precision,
+  from_acc     double precision,
+  from_metres  double precision,
+  near_id      uuid,
+  near_name    text,
+  near_metres  double precision,
+  likely_dupe  boolean not null default false,
+  status       text not null default 'pending' check (status in ('pending','approved','rejected')),
+  created_at   timestamptz not null default now(),
+  reviewed_at  timestamptz,
+  machine_id   uuid references machines(id)
+);
+
+-- A reviewer taps straight from the Supabase table editor to satellite view
+-- to sanity-check a submission, no separate map needed.
+alter table machine_submissions add column if not exists maps_url text
+  generated always as (
+    'https://www.google.com/maps/@' || lat::text || ',' || lng::text || ',19z'
+  ) stored;
+
+create index if not exists machine_submissions_status
+  on machine_submissions (status, created_at desc);
+
+alter table machine_submissions enable row level security;
+
+-- No policies, no grants, in either direction. Writes happen only through
+-- public.submit_machine() below, which runs as the function owner and so
+-- bypasses RLS the same way public.report_machine() already does for
+-- `reports` — anon never gets a table-level grant to piggyback on. Reads
+-- happen only via the Supabase dashboard / service role: the queue is
+-- private, so nobody can watch whether their own junk landed or got
+-- rejected.
+revoke all on table public.machine_submissions from anon, authenticated;
+
+-- One row per accepted submission. Same shape as private.report_guard, kept
+-- separate because the rate limits below are deliberately tighter and
+-- aren't keyed to any one machine (there isn't one yet).
+create table if not exists private.submission_guard (
+  id          bigint generated always as identity primary key,
+  ident       text not null,
+  ip_ident    text not null,
+  created_at  timestamptz not null default now()
+);
+create index if not exists submission_guard_ident on private.submission_guard (ident, created_at desc);
+create index if not exists submission_guard_ip    on private.submission_guard (ip_ident, created_at desc);
+
+-- Returns one of: ok, cooldown, flood, invalid. Same string-return style as
+-- report_machine() — the client maps each case to its own line of
+-- Portuguese without depending on HTTP status plumbing.
+--
+-- Deliberately does NOT check the submitter's distance from the machine —
+-- adding a machine from home with accurate coordinates is legitimate and
+-- welcome, unlike reporting a status you didn't see. `from_lat`/`from_lng`,
+-- when given, are recorded only as a review signal (`from_metres`), never
+-- used to accept or reject.
+create or replace function public.submit_machine(
+  name      text,
+  lat       double precision,
+  lng       double precision,
+  chain     text default null,
+  note      text default null,
+  from_lat  double precision default null,
+  from_lng  double precision default null,
+  from_acc  double precision default null,
+  device    text default null
+) returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  ip        text;
+  who       text;
+  who_ip    text;
+  v_name    text;
+  v_note    text;
+  v_chain   text;
+  v_town    text;
+  n_id      uuid;
+  n_name    text;
+  n_metres  double precision;
+  f_metres  double precision;
+  n         integer;
+  new_id    uuid;
+begin
+  v_name  := trim(coalesce(name, ''));
+  v_note  := nullif(trim(coalesce(note, '')), '');
+  v_chain := nullif(trim(coalesce(chain, '')), '');
+
+  if length(v_name) < 3 or length(v_name) > 80 then
+    return 'invalid';
+  end if;
+  -- 140 chars — a short line ("ao lado da entrada"), not a place for a
+  -- review essay. Room for review notes lives in the dashboard, not here.
+  if v_note is not null and length(v_note) > 140 then
+    return 'invalid';
+  end if;
+  if lat is null or lng is null then
+    return 'invalid';
+  end if;
+  -- Same bounding boxes machines_insert used to check: mainland, Madeira,
+  -- Azores.
+  if not (
+       (lat between 36.80 and  42.25 and lng between  -9.62 and  -6.10)
+    or (lat between 32.30 and  33.20 and lng between -17.35 and -16.20)
+    or (lat between 36.85 and  39.90 and lng between -31.40 and -24.90)
+  ) then
+    return 'invalid';
+  end if;
+
+  ip := coalesce(
+          nullif(current_setting('request.headers', true), '')::json ->> 'x-forwarded-for',
+          'sem-ip');
+  who_ip := private.guard_hash('ip', ip);
+  who    := private.guard_hash('dev', coalesce(nullif(device, ''), ip));
+
+  if random() < 0.02 then
+    delete from private.submission_guard where created_at < now() - interval '48 hours';
+  end if;
+
+  -- Same device, inside 2 min — catches a double-tapped save button. There's
+  -- no "same machine" to key a cooldown on the way report_machine() does;
+  -- the machine doesn't exist yet.
+  select count(*) into n from private.submission_guard g
+   where g.ident = who and g.created_at > now() - interval '2 minutes';
+  if n > 0 then return 'cooldown'; end if;
+
+  -- Submissions are for brand-new machines, and the country is already
+  -- 2,400+ deep — a genuine person adds a handful of new ones in their
+  -- lifetime, not per hour. Deliberately tighter than report_machine()'s
+  -- 20/hour and 60/day: 5/hour and 15/day per device.
+  select count(*) into n from private.submission_guard g
+   where g.ident = who and g.created_at > now() - interval '1 hour';
+  if n >= 5 then return 'flood'; end if;
+
+  select count(*) into n from private.submission_guard g
+   where g.ident = who and g.created_at > now() - interval '24 hours';
+  if n >= 15 then return 'flood'; end if;
+
+  -- IP backstop for someone rotating device ids, same reasoning as
+  -- report_machine()'s: shared addresses (CGNAT, a shop's wifi) shouldn't
+  -- lock out unrelated people. Looser than the device caps above, but
+  -- tighter than report_machine()'s 300/hour, because submissions are
+  -- rarer to begin with: 40/hour per IP.
+  select count(*) into n from private.submission_guard g
+   where g.ip_ident = who_ip and g.created_at > now() - interval '1 hour';
+  if n >= 40 then return 'flood'; end if;
+
+  -- Nearest existing machine. Source of the derived town — a new machine is
+  -- essentially always in its neighbour's concelho, which avoids putting
+  -- boundary geometry in the database — and of the duplicate-detection
+  -- signal below.
+  --
+  -- `submit_machine.lat`/`.lng` below, not bare `lat`/`lng`: this query's
+  -- FROM clause touches public.machines, which itself has lat/lng columns,
+  -- so an unqualified reference is ambiguous between the parameter and the
+  -- table column (Postgres error 42702) — qualifying with the function name
+  -- is the documented way to point at the parameter instead.
+  select m.id, m.name, m.town,
+         private.metres_between(submit_machine.lat, submit_machine.lng, m.lat, m.lng)
+    into n_id, n_name, v_town, n_metres
+    from public.machines m
+   order by private.metres_between(submit_machine.lat, submit_machine.lng, m.lat, m.lng) asc
+   limit 1;
+
+  if from_lat is not null and from_lng is not null then
+    f_metres := private.metres_between(from_lat, from_lng, lat, lng);
+  end if;
+
+  insert into public.machine_submissions
+    (name, chain, note, lat, lng, town, from_lat, from_lng, from_acc, from_metres,
+     near_id, near_name, near_metres, likely_dupe)
+  values
+    (v_name, v_chain, v_note, lat, lng, v_town, from_lat, from_lng, from_acc, f_metres,
+     n_id, n_name, n_metres, coalesce(n_metres < 75, false))
+  returning id into new_id;
+
+  insert into private.submission_guard (ident, ip_ident) values (who, who_ip);
+
+  return 'ok';
+end;
+$$;
+
+revoke all on function public.submit_machine(text, double precision, double precision, text, text, double precision, double precision, double precision, text) from public;
+grant execute on function public.submit_machine(text, double precision, double precision, text, text, double precision, double precision, double precision, text) to anon, authenticated;
+
+-- Promote an approved submission into a real machine. Idempotent by
+-- checking machine_id is still null before inserting — toggling status back
+-- and forth (pending -> approved -> rejected -> approved again) must never
+-- create a second machines row for the same submission.
+create or replace function private.approve_submission() returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  new_machine_id uuid;
+begin
+  if new.status = 'approved' and new.machine_id is null then
+    insert into public.machines (name, chain, town, lat, lng, source, external_id)
+    values (new.name, new.chain, new.town, new.lat, new.lng, 'user', null)
+    returning id into new_machine_id;
+    new.machine_id := new_machine_id;
+  end if;
+
+  if new.status in ('approved', 'rejected') and new.reviewed_at is null then
+    new.reviewed_at := now();
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists machine_submissions_approve on machine_submissions;
+create trigger machine_submissions_approve
+  before update on machine_submissions
+  for each row execute function private.approve_submission();
+
+-- The RPC above is the only public write path into `machines` now. Anyone
+-- with the anon key used to be able to insert a row directly and have it
+-- appear on the map instantly and forever; now the only door in goes through
+-- review.
+drop policy if exists machines_insert on machines;
+revoke insert on table public.machines from anon, authenticated;
+
+-- ─────────────────────────────────────────────
 -- Known gap
 --
--- Report writes go through public.report_machine(), which rate-limits by
--- device and IP and rejects reports too far from the machine — see the
--- comments above and docs/rate-limiting-plan.md for what that does and does
--- not stop. Two doors are still wide open, on purpose for now:
+-- Report writes go through public.report_machine() and new-machine writes
+-- go through public.submit_machine() — both rate-limit by device and IP;
+-- see the comments above and docs/rate-limiting-plan.md for what that does
+-- and does not stop. One door is still wide open, on purpose for now:
 --
 --   - Reads. `machines_read` and `reports_read` are both `using (true)`,
 --     so anyone with the anon key can scrape the whole dataset. Nothing here
---     limits that.
---   - `machines_insert`. Anyone can still add junk machines — it is bounded
---     to Portuguese coordinates and a sane name, but not rate-limited at all.
---     Worth doing the same way as reports, next.
+--     limits that. (`machine_submissions` is the exception — anon has no
+--     read access to it at all.)
 -- ─────────────────────────────────────────────

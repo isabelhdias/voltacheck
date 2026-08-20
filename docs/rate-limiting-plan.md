@@ -459,9 +459,9 @@ Be honest about this when describing it to anyone.
   escalated or locked out. Making rejections stick would need deliberately
   counting them too, which is not worth the complexity here.
 - **Reads are still wide open.** `reports_read` and `machines_read` are
-  `using (true)`. Nothing here limits scraping, and nothing here rate-limits
-  `machines_insert` — someone can still add junk machines. Worth doing next,
-  the same way.
+  `using (true)`. Nothing here limits scraping. (New machines no longer go in
+  through `machines_insert` at all — see "Machine submissions" below, which
+  closed that door the same way this document closes the one on `reports`.)
 - **What it does stop, plainly:** one person accidentally or casually spamming
   the same machine, a bored person tapping every pin in the country, and any
   volume of writes that would actually cost money or make the map useless. For
@@ -514,3 +514,61 @@ Be honest about this when describing it to anyone.
    that people use for ten seconds at a till, dropping the proximity check and
    keeping only the rate limiting is a defensible choice. The rate limiting is
    the part doing the real work.
+
+## Machine submissions — same idea, tighter numbers
+
+`machines_insert` used to let anyone with the anon key add a permanent row
+straight onto the map, instantly, forever, with no rate limit and no check
+beyond a bounding box and a name length. New machines now go through
+`public.submit_machine()`, a `security definer` RPC in the same shape as
+`report_machine()` above — it reuses `private.guard_secret` /
+`private.guard_hash`, so it's one salt and one hashing scheme for both
+writers — and lands in a `machine_submissions` review queue instead of
+`machines` directly. A trigger promotes a row into `machines` only once a
+human sets `status = 'approved'`; see the comments in `schema.sql` for the
+idempotency guarantee (toggling status back and forth must never create two
+machines).
+
+Unlike `report_machine()`, `submit_machine()` does **not** check the
+submitter's distance from the machine they're adding. Adding a machine you
+know about from home, with accurate coordinates, is legitimate and welcome —
+unlike reporting a status on a machine you're not looking at. `from_lat` /
+`from_lng`, when the client has a fix, are recorded as `from_metres` purely
+as a signal for the human reviewer, never used to accept or reject.
+
+**Rate limits are tighter than `report_machine()`'s, on purpose:**
+
+| limit | `report_machine()` | `submit_machine()` | why tighter |
+| --- | --- | --- | --- |
+| cooldown | 10 min, same machine + device | 2 min, same device | there's no "same machine" to key it on — the machine doesn't exist yet. 2 min just catches a double-tapped save button. |
+| per device / hour | 20 | 5 | the country already has 2,400+ machines seeded. A genuine person adds a handful of new ones in their lifetime, not per hour. |
+| per device / day | 60 | 15 | same reasoning, longer window. |
+| per IP / hour | 300 | 40 | submissions are rarer to begin with, so the shared-address backstop (CGNAT, a shop's wifi) can afford to be tighter without catching real reporters. |
+
+Duplicate detection is a review signal, not a rejection: `submit_machine()`
+finds the nearest existing machine and sets `likely_dupe = true` when it's
+under 75 m away. That distance was picked to catch someone re-adding a
+machine that's already mapped (a shopping centre's several entrances are
+usually further apart than that) without flagging two genuinely different
+machines at the same large site.
+
+## Cleanup: two junk rows already live
+
+Two rows got into `machines` through the old, unguarded `machines_insert`
+before this was fixed: a "Teste" row at `37.53, -7.44` (which is in Spain,
+not Portugal — the bounding box check didn't catch it because Spain's
+southern coast overlaps the same box), and a "Continente" row with no town
+(which also makes it invisible to town search).
+
+This does **not** belong in `schema.sql` — a `delete` in a file that runs on
+every migration would eventually match something legitimate and silently
+remove a real machine. It's a one-off, run by hand:
+
+```sql
+-- Check these still match before running — names, coordinates, whatever's
+-- changed since this was written. Confirm each row in the Supabase table
+-- editor first; this is not idempotent-safe the way schema.sql is, it's a
+-- delete.
+delete from machines where name = 'Teste' and lat = 37.53 and lng = -7.44;
+delete from machines where name = 'Continente' and town is null;
+```
