@@ -61,20 +61,40 @@ now the fallback path, not the default.
 A report decays to grey ("sem dados recentes") after 18h, so the map can't
 silently go stale. When a machine's last report is over 3h old, the sheet prompt
 changes from "Estiveste lá agora?" to "Ainda está assim?" to invite
-reconfirmation. `STALE_AFTER` and the 3h threshold live in the script.
+reconfirmation. `STALE_AFTER` and `RECONFIRM_AFTER` live in `app/config.js`.
 
 This decay is the point of the product. Don't add anything that makes a stale
 report look fresh.
 
 ## Files
 
-- `index.html` — the entire app: markup, styles, and script in one file. The
-  `SEED` block near the top of the script is generated — don't edit it by hand.
+- `index.html` — markup and styles, plus a single
+  `<script type="module" src="app/main.js">` that loads the app. No inline
+  app logic lives here any more.
+- `app/config.js` — `SUPABASE_URL` / `SUPABASE_ANON_KEY` and the other
+  tunables (`STALE_AFTER`, `RECONFIRM_AFTER`, `LOOKBACK_H`, colours, labels).
+  Isabel pastes her Supabase values in here, not in `index.html`.
+- `app/domain.js` — pure status/search logic (decay, reconfirm threshold,
+  town search, chain filtering). No `document`/`window`/`localStorage`/
+  `navigator`/`fetch` — this is the spec an iOS/Android port would mirror,
+  and what `node --test` unit-tests directly.
+- `app/store.js` — the `machines`/`selected`/`activeChain` state and
+  localStorage persistence (`localSeed`, `localLoad`, `localSave`,
+  `deviceId`).
+- `app/api.js` — Supabase reads and writes (`connect`, `pull`, `pushReport`,
+  `pushMachine`, `getFix`), and the PostgREST paging.
+- `app/map.js` — Leaflet init, pins, viewport culling, the tally strip.
+- `app/ui.js` — the bottom sheet, town search, chain filter chips, toast.
+- `app/main.js` — wires the modules together and boots the app.
+- `seed/machines.js` — the generated `SEED` array (2,444 rows), imported by
+  `app/store.js`. Don't edit it by hand: run `python3 tools/import_osm.py`.
 - `schema.sql` — Postgres schema for Supabase (machines, reports) and RLS
   policies allowing anonymous read and insert. Paste into the Supabase SQL
   editor; safe to re-run. Note the "Known gap" comment at the bottom.
 - `tools/import_osm.py` — the machine importer. Python 3 stdlib, no install.
-  Run it to refresh the data; it rewrites `seed/` and the `SEED` block.
+  Run it to refresh the data; it rewrites `seed/`. (As of the `app/` split
+  above, it still targets the old single-file `SEED` block in `index.html`
+  and needs an update to write `seed/machines.js` instead — not yet done.)
 - `seed/machines.csv`, `seed/machines.sql` — generated. Load either one into
   Supabase.
 - `docs/seed-data-plan.md` — where the data comes from and how to refresh it.
@@ -104,5 +124,5 @@ run anything locally.
 ## Secrets
 
 The repo is public and deploys from `main`. The anon key is designed to be
-public and belongs in `index.html`; the **service key never goes in the repo** —
-importers read it from the environment.
+public and belongs in `app/config.js`; the **service key never goes in the
+repo** — importers read it from the environment.
