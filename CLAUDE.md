@@ -22,6 +22,14 @@ Roadmap, in priority order:
    `docs/rate-limiting-plan.md`.
 3. ~~Search by town~~ — done. A box in the topbar matches concelhos as you
    type, ignoring accents, and frames a town's machines on the map.
+4. ~~Filter by supermarket~~ — done. Chips under the search box narrow the
+   map to one chain. `chain` is a real column, set once at import time by
+   `tools/import_osm.py`, not guessed client-side — this app is meant to be
+   the base for iOS/Android clients later, and those want to query it
+   server-side.
+
+The app is live and shared — the Supabase project exists, so local mode is
+now the fallback path, not the default.
 
 ## Hard constraints
 

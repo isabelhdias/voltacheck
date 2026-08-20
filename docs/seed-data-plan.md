@@ -113,12 +113,13 @@ A full run takes about 40 seconds.
 
 ## Schema
 
-`schema.sql` grew four columns, and is now safe to re-run over an existing
+`schema.sql` grew five columns, and is now safe to re-run over an existing
 database:
 
 - `external_id` — the source's id, unique. What makes re-imports idempotent.
 - `town` — the concelho. Indexed on `lower(town)` for roadmap item 3.
 - `source` — `'osm'` / `'sdr'` / `'user'`.
+- `chain` — the supermarket, for filtering. See "Filter by chain" below.
 - `address` — nothing fills it. OSM carries no street address for these; the
   name ("Pingo Doce Altura") is the label people actually recognise, and the
   sheet now shows the concelho instead of raw coordinates.
@@ -143,9 +144,44 @@ Two fixes went in alongside:
    mode and costs no extra request. The `lower(town)` index in `schema.sql`
    is therefore unused for now; it is harmless, and it is what search would
    need if this ever moves server-side.
+4. ~~Filter by chain~~ — done. See below.
 
-All three are done. The next real step is Isabel's: create the Supabase
-project, at which point the app goes from local mode to shared.
+All four are done. The Supabase project is live; local mode is now the
+fallback, not the default.
+
+## Filter by chain
+
+A row of chips under the search box — "Todas", then each supermarket by
+machine count, "Outras" last — narrows what's drawn on the map and what the
+tally counts.
+
+OSM carries no tag for which supermarket hosts a machine, only for the Volta
+network itself (`operator:wikidata=Q138952882`). The chain is encoded only in
+the name string ("Lidl Lisboa - R. Leão de Oliveira"), so `tools/import_osm.py`
+extracts it once, at import time, into a real `chain` column — not guessed in
+the browser on every render. That distinction mattered here: this app is
+meant to become the base for iOS/Android clients later, and those want to
+query `chain` server-side, not re-derive it from a name string in every
+client that ever gets written.
+
+The list is set by a threshold, not by hand-picking recognisable names: any
+supermarket with ≥15 machines nationwide gets its own chip. At the current
+import that's 11 chains — Pingo Doce, Auchan, Continente, Lidl, Intermarché,
+Aldi, SPAR, Mercadona, Algartalhos, Meu Super, Coviran — covering 91.8% of
+machines, zero ambiguous matches (no name matches two chains' patterns). The
+other 8.2% are genuine one-off shops and small local groceries with no chain
+identity ("Supermercado Azenhas", "Catuna e Silva") — they land in "Outras",
+which is an honest bucket, not a dumping ground: it is the twelfth-largest
+group in the whole dataset, bigger than four of the named chains.
+
+`chain` is `null` for machines added through the app (`source = 'user'`) —
+nobody is asking a person adding a corner shop to pick from a supermarket
+list. The client treats a null/missing chain as `"Outras"`, so those machines
+still show up under something, they just do not claim a brand they are not.
+
+Re-running the importer updates `chain` for every `source = 'osm'` row via the
+same upsert that already handles `name`/`lat`/`lng`/`town`; `source = 'user'`
+rows are never touched, same as before.
 
 ## A bug the real data exposed
 
@@ -162,10 +198,12 @@ landed.
 
 ## Still needs Isabel
 
-- Create the Supabase project, run `schema.sql`, load `seed/machines.csv`, and
-  paste `SUPABASE_URL` / `SUPABASE_ANON_KEY` into the CONFIG block in
-  `index.html`. Until then the app runs in local mode — which now shows all
-  2.444 machines, so it is genuinely usable in the meantime.
+- **Run the updated `schema.sql` again** (adds the `chain` column; every
+  statement is idempotent, safe over the live database) and **re-load
+  `seed/machines.sql`** (backfills `chain` on the 2.444 imported machines via
+  the existing upsert — verified against a snapshot of the live database
+  before writing this, no duplication, machines people added themselves
+  untouched).
 - The service key for the importer stays local. Never commit it; the repo is
   public and deploys from `main`. (The current importer only reads from
   OpenStreetMap and needs no key at all — it writes files, not rows.)
