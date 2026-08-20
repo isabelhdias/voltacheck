@@ -108,11 +108,30 @@ export async function pushReport(machineId, status){
   return res.data || "erro";
 }
 
-export async function pushMachine(name, lat, lng){
-  if(!store.live) return { id: "u-" + Date.now() };
-  var res = await db.from("machines")
-                    .insert({ name: name, lat: lat, lng: lng })
-                    .select("id")
-                    .single();
-  return res.error ? null : res.data;
+/* New machines no longer go straight into `machines` — they go through
+   submit_machine(), a review-queue RPC in the same shape as pushReport's
+   report_machine(): a status string, not a boolean, so the caller can say
+   something useful for each case. Local mode is unchanged and still adds
+   the machine directly — there's no queue to speak of without a shared
+   database.
+
+   Deliberately reads store.userPos rather than calling getFix(): the
+   submitter's own position is attached only when a previous locate tap
+   already recorded one, never by prompting for a fresh fix here. */
+export async function submitMachine(fields){
+  if(!store.live) return "ok-local";
+  var pos = store.userPos;
+  var res = await db.rpc("submit_machine", {
+    name:     fields.name,
+    chain:    fields.chain,
+    note:     fields.note,
+    lat:      fields.lat,
+    lng:      fields.lng,
+    from_lat: pos ? pos.lat : null,
+    from_lng: pos ? pos.lng : null,
+    from_acc: null,
+    device:   deviceId()
+  });
+  if(res.error) return "erro";
+  return res.data || "erro";
 }

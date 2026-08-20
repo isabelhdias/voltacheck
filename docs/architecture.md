@@ -23,7 +23,7 @@ there is no separate build artifact that could differ from the source.
 | `app/config.js` | `SUPABASE_URL` / `SUPABASE_ANON_KEY` and every tunable: `STALE_AFTER`, `RECONFIRM_AFTER`, `LOOKBACK_H`, `PAGE`, pin cap, colours, labels. |
 | `app/domain.js` | Pure status/search/decay logic. See below — this is the module that matters most. |
 | `app/store.js` | In-memory `machines`/`selected`/`activeChain`/`activeStatuses`/`userPos` state, plus localStorage persistence (`localSeed`, `localLoad`, `localSave`, `deviceId`) for local mode. `activeStatuses`/`userPos` are deliberately never persisted. |
-| `app/api.js` | Supabase reads and writes: `connect`, `pull`, `pushReport`, `pushMachine`, and `pageAll`, the PostgREST paging helper. No-ops (or local-only stand-ins) when running in local mode. |
+| `app/api.js` | Supabase reads and writes: `connect`, `pull`, `pushReport`, `submitMachine`, and `pageAll`, the PostgREST paging helper. No-ops (or local-only stand-ins) when running in local mode. |
 | `app/map.js` | Leaflet init, pin rendering, viewport culling (nearest-to-user when a fix is known, nearest-to-map-centre otherwise). |
 | `app/ui.js` | The bottom sheet (incl. the distance line), town search box, chain filter chips, status filter chips (the tally row), the active-filter badge and empty-state reset, toast. |
 | `app/main.js` | Wires the modules together, decides live vs. local mode, and starts the app. |

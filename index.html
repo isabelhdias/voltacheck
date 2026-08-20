@@ -234,10 +234,11 @@
   }
   body.adding .addbar{display:block}
   .addbar p{margin:0 0 9px;font-size:12.5px;font-weight:600;color:var(--ink-soft)}
-  .addbar input{
+  .addbar input, .addbar select{
     width:100%;padding:11px 12px;font:inherit;font-size:15px;font-weight:500;
     border:1.5px solid var(--line);border-radius:11px;background:var(--paper);color:var(--ink);
   }
+  .addbar input + input, .addbar input + select, .addbar select + input{margin-top:9px}
   .addbar .row{display:flex;gap:8px;margin-top:9px}
   .addbar button{
     flex:1;padding:11px;font:inherit;font-weight:700;font-size:14px;border-radius:11px;
@@ -306,7 +307,9 @@
 
 <div class="addbar">
   <p>Arrasta o mapa até a máquina ficar dentro do círculo.</p>
-  <input id="add-name" placeholder="Onde é? Ex.: Pingo Doce Areeiro" autocomplete="off">
+  <input id="add-name" placeholder="Onde é? Ex.: Pingo Doce Areeiro" autocomplete="off" maxlength="80">
+  <select id="add-chain" aria-label="Cadeia"></select>
+  <input id="add-note" placeholder="Nota (opcional) — ex.: ao lado da entrada" autocomplete="off" maxlength="140">
   <div class="row">
     <button id="add-cancel">Cancelar</button>
     <button class="go" id="add-save">Adicionar</button>

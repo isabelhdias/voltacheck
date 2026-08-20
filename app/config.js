@@ -25,3 +25,13 @@ export const PAGE = 1000;
 export const LABEL = { ok:"A funcionar", full:"Cheia", down:"Avariada", stale:"Sem dados recentes" };
 export const COLOR = { ok:"#1F9E63", full:"#D9932B", down:"#D64545", stale:"#8C93A5" };
 export const GLYPH = { ok:"✓", full:"▲", down:"✕", stale:"?" };
+
+/* The 11 chains tools/import_osm.py recognises by name at import time (see
+   CHAIN_PATTERNS there) — kept in sync by hand, since the two run in
+   different languages and can't share a literal. Used to build the "add
+   machine" form's chain dropdown, so the submitter picks from the same list
+   the map already filters by, instead of a client-side guess. */
+export const CHAINS = [
+  "Pingo Doce", "Auchan", "Continente", "Lidl", "Intermarché", "Aldi",
+  "SPAR", "Mercadona", "Algartalhos", "Meu Super", "Coviran",
+];

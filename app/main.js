@@ -4,6 +4,7 @@
 
 import * as store from './store.js';
 import * as api from './api.js';
+import { CHAINS } from './config.js';
 import { map, draw, setOnSelect } from './map.js';
 import * as ui from './ui.js';
 
@@ -35,14 +36,40 @@ async function connect(){
 }
 
 /* ───────── add machine ───────── */
+//
+// Grew from "drop a named pin" into a submission form: name, chain, an
+// optional note. In live mode this goes into a review queue and never
+// touches the map or the store — a submission isn't a machine until someone
+// approves it. Local mode is unchanged: no queue to speak of without a
+// shared database, so it still adds directly, same as before.
 
-var nameInput = document.getElementById("add-name");
-var saveBtn   = document.getElementById("add-save");
+var nameInput   = document.getElementById("add-name");
+var chainSelect = document.getElementById("add-chain");
+var noteInput   = document.getElementById("add-note");
+var saveBtn     = document.getElementById("add-save");
+
+// Built from app/config.js's CHAINS, not hand-duplicated in index.html — one
+// list, shared with the chain filter chips and tools/import_osm.py's own
+// (necessarily separate, cross-language) copy.
+(function buildChainOptions(){
+  var outra = document.createElement("option");
+  outra.value = "";
+  outra.textContent = "Outra";
+  chainSelect.appendChild(outra);
+  CHAINS.forEach(function(c){
+    var opt = document.createElement("option");
+    opt.value = c;
+    opt.textContent = c;
+    chainSelect.appendChild(opt);
+  });
+})();
 
 document.getElementById("add").addEventListener("click", function(){
   ui.closeSheet();
   document.body.classList.add("adding");
   nameInput.value = "";
+  chainSelect.value = "";
+  noteInput.value = "";
 });
 
 document.getElementById("add-cancel").addEventListener("click", function(){
@@ -57,21 +84,33 @@ saveBtn.addEventListener("click", async function(){
     return;
   }
 
+  var chain = chainSelect.value || null;
+  var note  = noteInput.value.trim() || null;
   var c = map.getCenter();
   saveBtn.disabled = true;
 
-  var row = await api.pushMachine(name, c.lat, c.lng);
+  var r = await api.submitMachine({ name:name, chain:chain, note:note, lat:c.lat, lng:c.lng });
 
-  if(row){
-    store.machines.push({ id: row.id, name: name, lat: c.lat, lng: c.lng,
-                           town: "", chain: "Outras", src: "user", reports: [] });
+  if(r === "ok-local"){
+    store.machines.push({ id: "u-" + Date.now(), name: name, lat: c.lat, lng: c.lng,
+                           town: "", chain: chain || "Outras", src: "user", reports: [] });
     store.localSave();
     document.body.classList.remove("adding");
+    ui.buildChainChips();
     ui.buildTally();
     draw();
     ui.toast("Máquina adicionada");
+  } else if(r === "ok"){
+    document.body.classList.remove("adding");
+    ui.toast("Obrigado — fica em revisão antes de aparecer no mapa.");
+  } else if(r === "cooldown"){
+    ui.toast("Já enviaste uma máquina há pouco. Tenta daqui a uns minutos.");
+  } else if(r === "flood"){
+    ui.toast("Muitas máquinas enviadas deste telemóvel. Tenta mais logo.");
+  } else if(r === "invalid"){
+    ui.toast("Confirma o nome e a posição da máquina.");
   } else {
-    ui.toast("Não consegui adicionar. Verifica a ligação.");
+    ui.toast("Não consegui enviar. Tenta outra vez.");
   }
 
   saveBtn.disabled = false;
