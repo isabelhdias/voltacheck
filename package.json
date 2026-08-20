@@ -7,6 +7,7 @@
   "scripts": {
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "node --test \"test/unit/**/*.test.js\"",
+    "test:integration": "node --test \"test/integration/**/*.test.js\"",
     "test:e2e": "playwright test",
     "serve": "http-server -p 8099 -s ."
   },
