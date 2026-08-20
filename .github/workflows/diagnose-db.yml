@@ -101,7 +101,7 @@ jobs:
             local err="$1"
             if printf '%s' "$err" | grep -qi 'password authentication failed'; then
               echo "wrong-password"
-            elif printf '%s' "$err" | grep -qiE 'tenant or user not found|could not translate host name|name or service not known|temporary failure in name resolution|nodename nor servname|server does not exist'; then
+            elif printf '%s' "$err" | grep -qiE 'tenant or user not found|tenant/user .* not found|enotfound|could not translate host name|name or service not known|temporary failure in name resolution|nodename nor servname|server does not exist'; then
               echo "not-this-region"
             else
               echo "timeout-or-other"
