@@ -1,0 +1,143 @@
+name: Migrate
+
+# Manual only. Applying schema.sql and seed/machines.sql to the live database
+# is a decision a person makes on purpose, not something a push should ever
+# trigger. Isabel runs this from the GitHub mobile app: Actions tab →
+# Migrate → Run workflow.
+on:
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    name: Migrate
+    runs-on: ubuntu-latest
+    # SUPABASE_DB_URL is a full Postgres connection string, added as a repo
+    # secret. Read into the environment once here so no step has to touch it
+    # by name — see the "Apply migration" step for the one place it's used.
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Same containers CI uses, applying these exact files against real
+      # Postgres + PostgREST. If schema.sql or seed/machines.sql is broken,
+      # this is where it fails — cheap (~6s) insurance before we touch
+      # production.
+      - name: Integration tests (Postgres + PostgREST)
+        run: npm run test:integration
+
+      - name: Install postgresql-client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      # Prints only the host, never the password. sed's -n / p pair means it
+      # emits nothing at all if the pattern doesn't match, instead of falling
+      # back to printing the unmodified (secret-bearing) input — that's the
+      # difference between a safe no-op and a leak if the secret is ever
+      # malformed.
+      - name: Confirm target host
+        run: |
+          host=$(printf '%s' "$SUPABASE_DB_URL" | sed -n -E 's#.*@([^:/]+).*#\1#p')
+          if [ -z "$host" ]; then
+            echo "Could not parse a host out of SUPABASE_DB_URL — refusing to continue."
+            exit 1
+          fi
+          echo "Target host: $host"
+
+      # Repo secret must be the Session pooler string (port 5432, IPv4) from
+      # Supabase's Connect dialog — NOT Direct connection and NOT Transaction
+      # pooler. Two different things break the other two:
+      #   - Direct connection is IPv6-only by default, and GitHub-hosted
+      #     runners are IPv4-only, so it fails with an opaque connect
+      #     timeout that looks like nothing is wrong with the string itself.
+      #   - Transaction pooler (port 6543) doesn't support prepared
+      #     statements / session state the way this migration's DDL needs,
+      #     so schema changes misbehave under it.
+      # Session pooler is IPv4-compatible and behaves like a normal
+      # connection, which is what a multi-statement, single-transaction
+      # migration needs. Don't "simplify" this to Direct or Transaction mode.
+      - name: Capture pre-migration state
+        run: |
+          before_count=$(psql "$SUPABASE_DB_URL" -t -A -c "select count(*) from public.machines")
+          before_salt=$(psql "$SUPABASE_DB_URL" -t -A -c "select salt from private.guard_secret where id = 1")
+          echo "before_count=$before_count" >> "$GITHUB_ENV"
+          echo "before_salt=$before_salt" >> "$GITHUB_ENV"
+          echo "Machines before: $before_count"
+
+      # One transaction, both files. --single-transaction with ON_ERROR_STOP=1
+      # means if seed/machines.sql fails, schema.sql's changes roll back too
+      # — this is the whole point of the workflow: partial application (the
+      # incident where schema.sql ran and seed/machines.sql didn't, leaving
+      # every machine's chain column NULL) becomes impossible. Verified
+      # locally against a container by deliberately corrupting the seed file
+      # and confirming the schema changes were rolled back as well.
+      - name: Apply migration
+        run: |
+          psql "$SUPABASE_DB_URL" --single-transaction -v ON_ERROR_STOP=1 \
+            -f schema.sql -f seed/machines.sql
+
+      # Fail the job — don't just warn — if any of this is off. These four
+      # checks are the ones that matter: enough machines landed, the exact
+      # NULL-chain bug that already shipped once can't recur, the rate-limit
+      # salt (rotating it would silently reset every counter) didn't move,
+      # and reports' shape hasn't drifted.
+      - name: Verify migration
+        run: |
+          after_count=$(psql "$SUPABASE_DB_URL" -t -A -c "select count(*) from public.machines")
+          null_chain=$(psql "$SUPABASE_DB_URL" -t -A -c "select count(*) from public.machines where source = 'osm' and chain is null")
+          after_salt=$(psql "$SUPABASE_DB_URL" -t -A -c "select salt from private.guard_secret where id = 1")
+          report_cols=$(psql "$SUPABASE_DB_URL" -t -A -c "select string_agg(column_name, ',' order by ordinal_position) from information_schema.columns where table_schema = 'public' and table_name = 'reports'")
+
+          fail=0
+
+          if [ "$after_count" -lt 2444 ]; then
+            echo "FAIL: only $after_count machines, expected at least 2444."
+            fail=1
+          fi
+
+          if [ "$null_chain" != "0" ]; then
+            echo "FAIL: $null_chain OSM machines have a NULL chain — this is the exact bug that shipped before."
+            fail=1
+          fi
+
+          if [ "$after_salt" != "$before_salt" ]; then
+            echo "FAIL: the rate-limit guard salt changed. Every device/IP rate-limit counter just silently reset."
+            fail=1
+          fi
+
+          if [ "$report_cols" != "id,machine_id,status,created_at" ]; then
+            echo "FAIL: reports columns are '$report_cols', expected 'id,machine_id,status,created_at'."
+            fail=1
+          fi
+
+          {
+            echo "## Migration result"
+            if [ "$fail" -eq 0 ]; then
+              echo "**Migration applied.**"
+            else
+              echo "**Migration FAILED verification — see the failing checks above.**"
+            fi
+            echo ""
+            echo "- Machines: $before_count -> $after_count"
+            echo "- OSM machines with no chain: $null_chain (must be 0)"
+            echo "- Guard salt unchanged: $([ "$after_salt" = "$before_salt" ] && echo yes || echo NO)"
+            echo "- reports columns: $report_cols"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "Machines: $before_count -> $after_count"
+          echo "OSM machines with no chain: $null_chain (must be 0)"
+          echo "Guard salt unchanged: $([ "$after_salt" = "$before_salt" ] && echo yes || echo NO)"
+          echo "reports columns: $report_cols"
+
+          exit $fail
