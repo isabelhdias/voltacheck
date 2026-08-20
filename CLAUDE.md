@@ -101,6 +101,25 @@ report look fresh.
   does and doesn't stop.
 - `docs/supabase-setup.md` — the step-by-step for creating the project and
   going from local mode to shared. Written for an iPad; no CLI.
+- `docs/domain-contract.md` — what `app/domain.js` guarantees and how an
+  iOS/Android port should consume `test/vectors/*.json`.
+- `docs/architecture.md` — the module layout, why `domain.js` takes `now` as
+  a parameter, and what each of the four test layers is for. Start here.
+- `test/vectors/*.json` — the language-agnostic contract `domain.js` is
+  tested against; also the contract future native ports assert against.
+- `test/unit/domain.test.js` — loads the vectors and runs them through
+  `domain.js` with `node --test`. No I/O, ~100ms.
+- `test/integration/` — `api.test.js` runs `app/api.js`'s paging and
+  `report_machine()` against real Postgres + PostgREST containers that
+  `docker-env.js` builds and tears down itself. Needs Docker.
+- `test/e2e/` — Playwright specs driving the real `index.html` in Chromium.
+  Runs in local mode only; `fixtures.js` stubs `supabase-js` so it can never
+  reach the production database.
+- `.github/workflows/ci.yml` — runs unit, integration, and e2e tests on every
+  push to `main`. The only feedback loop Isabel has, since she can't run
+  anything locally — read as pass/fail on her phone.
+- `package.json` / `package-lock.json` — test tooling only, never served.
+  The app itself still has no build step.
 
 ## Working style
 
