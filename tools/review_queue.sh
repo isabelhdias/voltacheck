@@ -49,7 +49,12 @@ rows=$(psql "$SUPABASE_DB_URL" -t -A -F $'\x1f' -c "
 
 count=$(psql "$SUPABASE_DB_URL" -t -A -c "select count(*) from public.machine_submissions where status = 'pending';")
 
-existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --label review-queue --state open --json number --jq '.[0].number')
+# Oldest open labelled issue, not "whichever came back first". gh's default
+# ordering is not something to lean on, and if two ever carry the label at
+# once — a race, or a stray issue someone labelled — picking arbitrarily
+# means the queue silently alternates between them and half the redraws
+# land where nobody is looking. Sorting by number always converges on one.
+existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --label review-queue --state open --json number --jq 'sort_by(.number) | .[0].number')
 
 # Empty queue closes whatever is open and stops — no comment, no noise,
 # nothing pinging a phone for a queue that is already empty.
