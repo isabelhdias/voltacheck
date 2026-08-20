@@ -16,6 +16,7 @@ Rough order, about twenty minutes:
 4. Copy the two values into `index.html`
 5. Check it went live
 6. One small thing to look up afterwards
+7. Set up the Migrate workflow, so future migrations aren't manual again
 
 ---
 
@@ -39,6 +40,9 @@ week, that is what it is.
 Wait for it to finish provisioning — a couple of minutes.
 
 ## 2. Run `schema.sql`
+
+The very first time, before the automated workflow below has anything to talk
+to, do this by hand:
 
 Open [`schema.sql`](../schema.sql) on GitHub, tap **Raw**, select all, copy.
 
@@ -76,6 +80,10 @@ Then check it took: **Table Editor** → `machines` should say **2444 rows**.
 > broken. To *refresh* the data later, use `seed/machines.sql` instead: it
 > upserts, so it updates rows rather than duplicating them, and it leaves
 > machines people added through the app alone.
+
+**After this first time, don't do steps 2 and 3 by hand again — use the
+Migrate workflow below instead.** It runs both files together and cannot
+leave you in the half-applied state these two steps can.
 
 ## 4. Copy the two values into `index.html`
 
@@ -174,6 +182,70 @@ delete from machines where source = 'osm';
 
 then load the CSV again. That deliberately leaves `source = 'user'` machines —
 anything people added through the app — untouched.
+
+## 7. Set up the Migrate workflow, so future migrations aren't manual again
+
+Steps 2 and 3 above are how you get the database going the very first time.
+After that, don't repeat them by hand — this is what caused the one real
+incident so far: `schema.sql` got pasted and run, `seed/machines.sql` didn't,
+and the site quietly shipped with every machine's chain blank. Nobody noticed
+until the filter chips under the search box showed only two chains instead of
+the real list.
+
+There's a GitHub Actions workflow, `Migrate`, that applies both files together
+as one database transaction. Either both go in, or — if anything about either
+file is wrong — neither does. That specific failure can't happen through this
+workflow.
+
+**One-time setup, from your phone:**
+
+1. In Supabase: **Connect** button (top of the project) → **Session pooler**
+   tab. Copy the connection string shown there and swap in your database
+   password (the one you saved when creating the project) where it says
+   `[YOUR-PASSWORD]`.
+
+   **This has to be the Session pooler string, not the other two Supabase
+   offers.** The three look similar but only one works here:
+   - **Direct connection** — fails. It only accepts IPv6 by default, and the
+     computer that runs this workflow (a GitHub Actions runner) only speaks
+     IPv4. It doesn't fail loudly — it just hangs and times out, which looks
+     like nothing at all.
+   - **Transaction pooler** (port `6543`) — also wrong, for a quieter reason.
+     It doesn't support the kind of multi-statement, single-transaction run
+     this migration needs, so schema changes behave unpredictably through it.
+   - **Session pooler** (port `5432`) — the right one. Works over IPv4, and
+     behaves like a normal database connection for this kind of migration.
+
+2. In the GitHub repo: **Settings** → **Secrets and variables** → **Actions**
+   → **New repository secret**.
+   - Name: `SUPABASE_DB_URL`
+   - Value: the Session pooler string from step 1, password filled in.
+   - Save.
+
+   This secret is never shown in logs and never appears in the repo. Only the
+   workflow can read it.
+
+That's it — one secret, set once. You won't need to touch it again unless the
+database password changes.
+
+**Running a migration, from your phone, any time after that:**
+
+1. GitHub app (or github.com in Safari) → this repo → **Actions** tab.
+2. Tap **Migrate** in the left list of workflows.
+3. Tap **Run workflow** → **Run workflow** again to confirm.
+4. Wait for the green check (a minute or two — it stands up a throwaway test
+   database first and applies the real migration to it, to catch a broken
+   file before it ever touches production).
+5. Tap into the run → the **Summary** page shows a short readable report:
+   machine count before and after, whether any OSM machine is missing its
+   chain, and either "migration applied" or exactly what failed. If it
+   failed, nothing partial was left behind — the transaction means production
+   is exactly as it was before you tapped the button.
+
+Hand-pasting `schema.sql` and `seed/machines.sql` into the SQL Editor (steps 2
+and 3 above) still exists as a fallback — for the very first setup, before the
+secret exists, or if GitHub Actions itself is ever down. Day to day, the
+Migrate workflow is the normal way to apply a database change.
 
 ## Once it is live
 
