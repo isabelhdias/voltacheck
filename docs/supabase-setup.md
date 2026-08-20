@@ -328,13 +328,29 @@ and waits for you to look at it. Here's the whole loop, end to end.
    look like duplicates (under 75 m from something already mapped) are
    marked with **⚠** and sorted to the top, then the rest oldest first.
 
-4. **You approve or reject in the Table Editor.** Open Supabase, **Table
-   Editor** → `machine_submissions`, find the row, and change `status` from
-   `pending` to `approved` or `rejected`. That's the only field you touch.
+4. **You tick a box in the issue.** Each submission carries **Aprovar** and
+   **Rejeitar** checkboxes. Tap one and you're done — the `Review apply`
+   workflow picks it up, sets the status in the database, says what it did
+   in the thread, and redraws the issue so the row disappears. No Supabase,
+   no typing.
 
-5. **A trigger does the rest.** Approving a row fires a database trigger
-   that copies it into `machines`, so it shows up on the map without you
-   doing anything else. Rejecting one just leaves it marked `rejected` —
+   The Table Editor still works if you'd rather: `machine_submissions`, find
+   the row, change `status` from `pending` to `approved` or `rejected`.
+   That's the only field you touch, and it's the fallback if a tick ever
+   fails (it comments in the thread when it does, rather than going quiet).
+
+   Ticking both boxes on the same machine does nothing on purpose — that
+   reads as a mis-tap rather than an instruction, so it says so and waits.
+
+   **Only you can do this.** The workflow refuses to run for anyone whose
+   GitHub login isn't the repository owner's, which is checked before it
+   ever touches the database credentials. The repo is public and anyone can
+   comment on an issue, so that guard is what makes a checkbox safe to be a
+   button.
+
+5. **A trigger does the rest.** Approving fires a database trigger that
+   copies the row into `machines`, so it shows up on the map without you
+   doing anything else. Rejecting just leaves it marked `rejected` —
    nothing is copied, nothing shows up.
 
 Once you've dealt with everything in the issue, the next scheduled run (or a

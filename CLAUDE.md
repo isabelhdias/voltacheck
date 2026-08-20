@@ -149,7 +149,13 @@ report look fresh.
 - `.github/workflows/review-queue.yml` — a few times a day, opens or
   updates one labelled GitHub issue listing pending `machine_submissions`,
   and closes it when the queue empties. Silent when there's nothing
-  waiting. This is how Isabel finds out something needs approving — and the
+  waiting. Rendering lives in `tools/review_queue.sh` because the apply
+  workflow needs it too.
+- `.github/workflows/review-apply.yml` — turns a ticked checkbox in that
+  issue into an approval or rejection, then redraws the issue. The one
+  workflow reachable from a public event, so read its header comment
+  before changing it: it is gated on `github.actor` being the repo owner,
+  and the issue body is treated as untrusted input. This is how Isabel finds out something needs approving — and the
   one piece of the system that can fail silently, since GitHub disables
   scheduled workflows after 60 days without a commit. See "The one way this
   alerting can go quiet" in `docs/supabase-setup.md`.

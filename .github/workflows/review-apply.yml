@@ -1,0 +1,134 @@
+name: Review apply
+
+# Turns a tick in the review-queue issue into an approval. Isabel works from
+# a phone; opening the Supabase Table Editor to change one field is the most
+# tedious step left in the loop, and this removes it.
+#
+# SECURITY. This is the only workflow reachable by an event a stranger can
+# cause — anyone with a GitHub account can edit nothing here, but issue
+# events are public surface, and this job holds SUPABASE_DB_URL. Three
+# things keep it closed:
+#
+#   1. The job-level `if` below requires github.actor to be the repository
+#      owner. GitHub sets that field; a commenter cannot forge it. Everyone
+#      else's events skip the job entirely, so the secret is never even
+#      loaded into an environment they can influence.
+#   2. That same check stops the obvious loop: this workflow redraws the
+#      issue when it is done, and a redraw by github-actions is not the
+#      owner, so it cannot retrigger itself.
+#   3. The issue body is untrusted text and is never interpolated into a
+#      run: block. It arrives through env: and the only thing extracted
+#      from it is a uuid matched against a strict hex pattern, so nothing a
+#      body could contain reaches psql as anything but an id.
+#
+# Workflows triggered by `issues` always run the copy on the default branch,
+# so a pull request cannot alter this file to weaken any of that.
+on:
+  issues:
+    types: [edited]
+
+permissions:
+  issues: write
+
+jobs:
+  apply:
+    name: Review apply
+    runs-on: ubuntu-latest
+    if: >-
+      github.actor == github.repository_owner &&
+      contains(github.event.issue.labels.*.name, 'review-queue')
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Install postgresql-client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      # BODY is attacker-shaped input in the general case, so it is quoted
+      # everywhere and never eval'd. grep -oE with an anchored uuid pattern
+      # is the whole sanitiser: whatever else the body holds, only 36
+      # characters of hex and dashes can come out the other side.
+      - name: Apply ticked boxes
+        id: apply
+        env:
+          BODY: ${{ github.event.issue.body }}
+        run: |
+          uuid='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+
+          picked() {
+            printf '%s' "$BODY" \
+              | grep -oE "^[[:space:]]*- \[[xX]\] .*<!--$1:$uuid-->" \
+              | grep -oE "$uuid" || true
+          }
+
+          approved=$(picked a)
+          rejected=$(picked r)
+
+          # A submission ticked both ways is a mis-tap, not an instruction.
+          # Doing nothing and saying so beats guessing which one was meant.
+          both=$(comm -12 <(printf '%s\n' $approved | sort -u) <(printf '%s\n' $rejected | sort -u) | tr -d '[:space:]' || true)
+          if [ -n "$both" ]; then
+            echo "conflict=1" >> "$GITHUB_OUTPUT"
+            echo "Both boxes ticked on the same submission — doing nothing."
+            exit 0
+          fi
+
+          n_ok=0
+          n_no=0
+
+          # `and status = 'pending'` makes each update a no-op the second
+          # time round, so a redraw that races a tick cannot double-apply.
+          for id in $approved; do
+            out=$(psql "$SUPABASE_DB_URL" -t -A -v ON_ERROR_STOP=1 \
+              -c "update public.machine_submissions set status = 'approved', reviewed_at = now() where id = '$id' and status = 'pending' returning 1")
+            [ -n "$out" ] && n_ok=$((n_ok + 1))
+          done
+
+          for id in $rejected; do
+            out=$(psql "$SUPABASE_DB_URL" -t -A -v ON_ERROR_STOP=1 \
+              -c "update public.machine_submissions set status = 'rejected', reviewed_at = now() where id = '$id' and status = 'pending' returning 1")
+            [ -n "$out" ] && n_no=$((n_no + 1))
+          done
+
+          echo "approved=$n_ok" >> "$GITHUB_OUTPUT"
+          echo "rejected=$n_no" >> "$GITHUB_OUTPUT"
+          echo "Approved $n_ok, rejected $n_no." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Say what happened
+        if: steps.apply.outputs.conflict == '1' || steps.apply.outputs.approved != '0' || steps.apply.outputs.rejected != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          N_OK: ${{ steps.apply.outputs.approved }}
+          N_NO: ${{ steps.apply.outputs.rejected }}
+          CONFLICT: ${{ steps.apply.outputs.conflict }}
+        run: |
+          if [ "$CONFLICT" = "1" ]; then
+            msg="Marcaste aprovar **e** rejeitar na mesma máquina — não fiz nada. Escolhe uma só."
+          else
+            msg="Feito: **$N_OK** aprovada(s), **$N_NO** rejeitada(s)."
+          fi
+          gh issue comment "${{ github.event.issue.number }}" --repo "$GITHUB_REPOSITORY" --body "$msg"
+
+      # Redraw straight away so the issue reflects the database rather than
+      # the tick. An approved submission drops out of the queue, so its
+      # boxes disappear; if the queue is now empty the issue closes itself.
+      - name: Redraw the queue
+        if: steps.apply.outputs.conflict != '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: tools/review_queue.sh >> "$GITHUB_STEP_SUMMARY"
+
+      # A tick that silently does nothing is the failure that would waste
+      # the most time: the box resets on the next redraw and the submission
+      # just stays pending. Say so in the thread instead.
+      - name: Report a failure in the thread
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment "${{ github.event.issue.number }}" --repo "$GITHUB_REPOSITORY" \
+            --body "Não consegui aplicar essa marcação — o workflow falhou. A submissão continua pendente; podes tentar outra vez ou mudar o \`status\` na Table Editor."
