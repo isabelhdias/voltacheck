@@ -37,10 +37,12 @@ Supabase → `map` and `ui` read `store` and call back into it on user action �
 ## Why `domain.js` is pure
 
 `app/domain.js` exports `statusOf`, `needsReconfirm`, `ago`, `norm`,
-`groupTowns`, `townsMatching`, `filterByChain`, `chainCounts`, and `latest`.
-None of them touch `document`, `window`, `localStorage`, `navigator`, or
-`fetch` — and none of them call `Date.now()`. Every function that cares about
-time takes `now` as an explicit epoch-millisecond argument instead.
+`groupTowns`, `townsMatching`, `filterByChain`, `chainCounts`, `latest`,
+`metresBetween`, `formatDistance`, `sortByDistance`, `filterByStatus`, and
+`statusCounts`. None of them touch `document`, `window`, `localStorage`,
+`navigator`, or `fetch` — and none of them call `Date.now()`. Every function
+that cares about time takes `now` as an explicit epoch-millisecond argument
+instead.
 
 This is deliberate, not incidental style: `domain.js` is the specification
 that the iOS and Android clients will need to reimplement byte-for-byte. The
@@ -89,7 +91,7 @@ skipped.
 
 ## If you are starting the iOS or Android client, read this first
 
-1. `app/domain.js` — the logic to port. Nine functions, two constants.
+1. `app/domain.js` — the logic to port. Fourteen functions, two constants.
 2. `test/vectors/*.json` (and `docs/domain-contract.md`) — the contract your
    port's tests assert against. Load the files as test resources; don't
    hand-transcribe cases.

@@ -1,0 +1,105 @@
+{
+  "description": "metresBetween(lat1,lng1,lat2,lng2) is the same haversine formula as private.metres_between() in schema.sql (12,742,000 m mean earth diameter) — the two must never quietly disagree about proximity. Because trig implementations can differ by fractions of a metre across platforms (JS vs. Swift vs. Kotlin), assert metresBetween results within toleranceMetres of expectedMetres, not by exact equality. formatDistance(metres) and sortByDistance(machines, from) are exact-equality checks — they're pure arithmetic/formatting/sort, not trig.",
+  "toleranceMetres": 0.5,
+  "metresBetweenCases": [
+    {
+      "id": "same-point-is-zero",
+      "description": "A point and itself is zero metres apart.",
+      "lat1": 38.7223, "lng1": -9.1393,
+      "lat2": 38.7223, "lng2": -9.1393,
+      "expectedMetres": 0
+    },
+    {
+      "id": "short-street-scale-hop",
+      "description": "Two points ~78 m apart on the same street — the everyday case, not the country-scale one.",
+      "lat1": 38.72230, "lng1": -9.13930,
+      "lat2": 38.72300, "lng2": -9.13930,
+      "expectedMetres": 77.83644865140475
+    },
+    {
+      "id": "lisbon-to-porto-real-world-reference",
+      "description": "Praça do Comércio (Lisbon) to Praça da Liberdade (Porto) — a real, checkable country-scale distance a Swift/Kotlin port can verify its haversine against.",
+      "lat1": 38.7071, "lng1": -9.1355,
+      "lat2": 41.1496, "lng2": -8.6109,
+      "expectedMetres": 275251.03349439404
+    },
+    {
+      "id": "porto-to-lisbon-is-symmetric",
+      "description": "Same two points, arguments swapped — the distance doesn't care which point is 'from'.",
+      "lat1": 41.1496, "lng1": -8.6109,
+      "lat2": 38.7071, "lng2": -9.1355,
+      "expectedMetres": 275251.03349439404
+    }
+  ],
+  "formatDistanceCases": [
+    {
+      "id": "zero-metres",
+      "metres": 0,
+      "expected": "a 0 m"
+    },
+    {
+      "id": "small-distance-rounds-to-nearest-10",
+      "metres": 12,
+      "expected": "a 10 m"
+    },
+    {
+      "id": "sub-km-rounds-sensibly-not-to-the-metre",
+      "description": "437 m, the exact case CLAUDE.md calls out — nobody needs 'a 437 m'.",
+      "metres": 437,
+      "expected": "a 440 m"
+    },
+    {
+      "id": "just-over-1km-shows-one-decimal-with-a-comma",
+      "description": "The 'a 1,2 km' example from the brief.",
+      "metres": 1200,
+      "expected": "a 1,2 km"
+    },
+    {
+      "id": "rounding-up-through-the-1km-boundary",
+      "description": "997 m rounds to 1000 m at the nearest-10 step, which must push it into the km bucket rather than displaying 'a 1000 m'.",
+      "metres": 997,
+      "expected": "a 1,0 km"
+    },
+    {
+      "id": "just-under-10km",
+      "metres": 9949,
+      "expected": "a 9,9 km"
+    },
+    {
+      "id": "rounding-up-through-the-10km-boundary",
+      "description": "9951 m rounds to 10,0 km at the one-decimal step, which must push it into the whole-km bucket rather than displaying 'a 10,0 km'.",
+      "metres": 9951,
+      "expected": "a 10 km"
+    },
+    {
+      "id": "long-distance-whole-km-only",
+      "description": "Country-scale distance (the Lisbon-Porto reference above): no decimal, nobody needs 275,25 km precision.",
+      "metres": 275251.03349439404,
+      "expected": "a 275 km"
+    }
+  ],
+  "sortByDistanceCases": [
+    {
+      "id": "no-position-returns-an-unsorted-copy",
+      "description": "from is null: original order is preserved (the fix isn't known yet, so there's nothing to sort by).",
+      "from": null,
+      "machines": [
+        { "id": "c", "lat": 38.80, "lng": -9.1393 },
+        { "id": "a", "lat": 38.7223, "lng": -9.1393 },
+        { "id": "b", "lat": 38.75, "lng": -9.1393 }
+      ],
+      "expectedIds": ["c", "a", "b"]
+    },
+    {
+      "id": "nearest-first",
+      "description": "Three points on the same meridian at clearly separated distances from 'from' — nearest sorts first regardless of input order.",
+      "from": { "lat": 38.7223, "lng": -9.1393 },
+      "machines": [
+        { "id": "far",  "lat": 38.7723, "lng": -9.1393 },
+        { "id": "near", "lat": 38.7228, "lng": -9.1393 },
+        { "id": "mid",  "lat": 38.7273, "lng": -9.1393 }
+      ],
+      "expectedIds": ["near", "mid", "far"]
+    }
+  ]
+}

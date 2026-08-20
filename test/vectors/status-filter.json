@@ -1,0 +1,112 @@
+{
+  "description": "filterByStatus(machines, statuses, now) keeps a machine only when statusOf(machine, now) is in the statuses list. An empty (or missing/null) statuses list is a real, intentional state — 'every toggle turned off' — and matches nothing; it must never be reinterpreted as 'no filter, show everything'. statusCounts(machines, now) buckets machines by statusOf() regardless of any status filter, so a caller (a status toggle showing its own count) can see what turning a status *on* would reveal even while it's off — that's what lets someone see a filter combination is a dead end before tapping it.",
+  "constants": {
+    "staleAfterMs": 64800000
+  },
+  "filterByStatusCases": [
+    {
+      "id": "all-four-statuses-is-the-default-unfiltered-view",
+      "description": "Every status listed — the app's default, all-toggles-on state — passes every machine through untouched.",
+      "now": 1700000000000,
+      "statuses": ["ok", "full", "down", "stale"],
+      "machines": [
+        { "id": "m1", "reports": [{ "s": "ok",   "at": 1700000000000 }] },
+        { "id": "m2", "reports": [{ "s": "full", "at": 1700000000000 }] },
+        { "id": "m3", "reports": [{ "s": "down", "at": 1700000000000 }] },
+        { "id": "m4", "reports": [] },
+        { "id": "m5", "reports": [{ "s": "ok",   "at": 1699935199999 }] }
+      ],
+      "expectedIds": ["m1", "m2", "m3", "m4", "m5"]
+    },
+    {
+      "id": "empty-list-matches-nothing-not-everything",
+      "description": "All four toggles off is allowed and means exactly what it says: nothing matches. Same machines as the case above.",
+      "now": 1700000000000,
+      "statuses": [],
+      "machines": [
+        { "id": "m1", "reports": [{ "s": "ok",   "at": 1700000000000 }] },
+        { "id": "m2", "reports": [{ "s": "full", "at": 1700000000000 }] },
+        { "id": "m3", "reports": [{ "s": "down", "at": 1700000000000 }] },
+        { "id": "m4", "reports": [] },
+        { "id": "m5", "reports": [{ "s": "ok",   "at": 1699935199999 }] }
+      ],
+      "expectedIds": []
+    },
+    {
+      "id": "null-statuses-also-matches-nothing",
+      "description": "A missing/null statuses argument behaves the same as an empty array, not as 'unfiltered'.",
+      "now": 1700000000000,
+      "statuses": null,
+      "machines": [
+        { "id": "m1", "reports": [{ "s": "ok", "at": 1700000000000 }] }
+      ],
+      "expectedIds": []
+    },
+    {
+      "id": "single-status-ok",
+      "now": 1700000000000,
+      "statuses": ["ok"],
+      "machines": [
+        { "id": "m1", "reports": [{ "s": "ok",   "at": 1700000000000 }] },
+        { "id": "m2", "reports": [{ "s": "full", "at": 1700000000000 }] },
+        { "id": "m3", "reports": [{ "s": "down", "at": 1700000000000 }] }
+      ],
+      "expectedIds": ["m1"]
+    },
+    {
+      "id": "stale-status-covers-both-no-reports-and-decayed-reports",
+      "description": "'stale' must catch a machine with no reports at all AND a machine whose latest report decayed past the 18h threshold — today's live reality, where every real report has decayed.",
+      "now": 1700000000000,
+      "statuses": ["stale"],
+      "machines": [
+        { "id": "no-reports", "reports": [] },
+        { "id": "decayed",    "reports": [{ "s": "ok", "at": 1699935199999 }] },
+        { "id": "fresh-ok",   "reports": [{ "s": "ok", "at": 1700000000000 }] }
+      ],
+      "expectedIds": ["no-reports", "decayed"]
+    },
+    {
+      "id": "compound-two-statuses",
+      "now": 1700000000000,
+      "statuses": ["ok", "down"],
+      "machines": [
+        { "id": "m1", "reports": [{ "s": "ok",   "at": 1700000000000 }] },
+        { "id": "m2", "reports": [{ "s": "full", "at": 1700000000000 }] },
+        { "id": "m3", "reports": [{ "s": "down", "at": 1700000000000 }] },
+        { "id": "m4", "reports": [] }
+      ],
+      "expectedIds": ["m1", "m3"]
+    }
+  ],
+  "statusCountsCases": [
+    {
+      "id": "mixed-bucket-counts",
+      "now": 1700000000000,
+      "machines": [
+        { "id": "m1", "reports": [{ "s": "ok",   "at": 1700000000000 }] },
+        { "id": "m2", "reports": [{ "s": "full", "at": 1700000000000 }] },
+        { "id": "m3", "reports": [{ "s": "down", "at": 1700000000000 }] },
+        { "id": "m4", "reports": [] },
+        { "id": "m5", "reports": [{ "s": "ok",   "at": 1699935199999 }] }
+      ],
+      "expected": { "ok": 1, "full": 1, "down": 1, "stale": 2 }
+    },
+    {
+      "id": "empty-machines-list",
+      "now": 1700000000000,
+      "machines": [],
+      "expected": { "ok": 0, "full": 0, "down": 0, "stale": 0 }
+    },
+    {
+      "id": "today-s-live-reality-almost-everything-is-stale",
+      "description": "Mirrors production right now: a handful of reports, all decayed past 18h, among many never-reported machines.",
+      "now": 1700000000000,
+      "machines": [
+        { "id": "m1", "reports": [] },
+        { "id": "m2", "reports": [] },
+        { "id": "m3", "reports": [{ "s": "ok", "at": 1699935199999 }] }
+      ],
+      "expected": { "ok": 0, "full": 0, "down": 0, "stale": 3 }
+    }
+  ]
+}

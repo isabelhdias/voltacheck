@@ -18,6 +18,11 @@ import {
   chainCounts,
   filterByChain,
   latest,
+  metresBetween,
+  formatDistance,
+  sortByDistance,
+  filterByStatus,
+  statusCounts,
 } from '../../app/domain.js';
 import { STALE_AFTER, RECONFIRM_AFTER, HOUR } from '../../app/config.js';
 
@@ -147,5 +152,72 @@ test('filterByChain — falsy chain passes everything through, a real chain filt
   for (const c of filterByChainCases) {
     const got = filterByChain(c.machines, c.chain).map((m) => m.id);
     assert.deepEqual(got, c.expectedIds, c.id);
+  }
+});
+
+/* ───────── distance.json: metresBetween ───────── */
+
+test('metresBetween — haversine, matching private.metres_between() in schema.sql', () => {
+  const { metresBetweenCases, toleranceMetres } = loadVector('distance.json');
+  assert.ok(metresBetweenCases.length > 0, 'vector file has no cases');
+
+  for (const c of metresBetweenCases) {
+    const got = metresBetween(c.lat1, c.lng1, c.lat2, c.lng2);
+    const diff = Math.abs(got - c.expectedMetres);
+    assert.ok(
+      diff <= toleranceMetres,
+      `${c.id}: ${c.description ?? ''} — got ${got}, expected ${c.expectedMetres} (within ${toleranceMetres} m)`
+    );
+  }
+});
+
+/* ───────── distance.json: formatDistance ───────── */
+
+test('formatDistance — pt-PT metres/km formatting with comma decimals', () => {
+  const { formatDistanceCases } = loadVector('distance.json');
+  assert.ok(formatDistanceCases.length > 0, 'vector file has no cases');
+
+  for (const c of formatDistanceCases) {
+    const got = formatDistance(c.metres);
+    assert.equal(got, c.expected, `${c.id}: ${c.description ?? ''}`);
+  }
+});
+
+/* ───────── distance.json: sortByDistance ───────── */
+
+test('sortByDistance — nearest first, unsorted copy when position is unknown', () => {
+  const { sortByDistanceCases } = loadVector('distance.json');
+  assert.ok(sortByDistanceCases.length > 0, 'vector file has no cases');
+
+  for (const c of sortByDistanceCases) {
+    const before = c.machines.map((m) => m.id);
+    const got = sortByDistance(c.machines, c.from).map((m) => m.id);
+    assert.deepEqual(got, c.expectedIds, `${c.id}: ${c.description ?? ''}`);
+    // Pure: the input array's own order must be untouched.
+    assert.deepEqual(c.machines.map((m) => m.id), before, `${c.id}: mutated its input`);
+  }
+});
+
+/* ───────── status-filter.json: filterByStatus ───────── */
+
+test('filterByStatus — matches statusOf(machine, now) against the given list; empty list matches nothing', () => {
+  const { filterByStatusCases } = loadVector('status-filter.json');
+  assert.ok(filterByStatusCases.length > 0, 'vector file has no cases');
+
+  for (const c of filterByStatusCases) {
+    const got = filterByStatus(c.machines, c.statuses, c.now).map((m) => m.id);
+    assert.deepEqual(got, c.expectedIds, `${c.id}: ${c.description ?? ''}`);
+  }
+});
+
+/* ───────── status-filter.json: statusCounts ───────── */
+
+test('statusCounts — buckets by statusOf(), independent of any status filter', () => {
+  const { statusCountsCases } = loadVector('status-filter.json');
+  assert.ok(statusCountsCases.length > 0, 'vector file has no cases');
+
+  for (const c of statusCountsCases) {
+    const got = statusCounts(c.machines, c.now);
+    assert.deepEqual(got, c.expected, `${c.id}: ${c.description ?? ''}`);
   }
 });

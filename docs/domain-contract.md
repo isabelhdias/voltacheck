@@ -15,10 +15,11 @@ about when a report goes stale, the app lies to someone.
 - **Deterministic.** Same inputs, same output, always. No randomness, no
   locale-dependent formatting beyond the fixed pt-PT strings baked in.
 - **Small surface.** `statusOf`, `needsReconfirm`, `ago`, `norm`,
-  `groupTowns`, `townsMatching`, `filterByChain`, `chainCounts`, `latest`.
-  A port only needs to match these nine functions and the two thresholds
-  they read from `app/config.js`: `STALE_AFTER` (18h) and `RECONFIRM_AFTER`
-  (3h).
+  `groupTowns`, `townsMatching`, `filterByChain`, `chainCounts`, `latest`,
+  `metresBetween`, `formatDistance`, `sortByDistance`, `filterByStatus`,
+  `statusCounts`. A port only needs to match these fourteen functions and
+  the two thresholds they read from `app/config.js`: `STALE_AFTER` (18h) and
+  `RECONFIRM_AFTER` (3h).
 
 ## The vectors are the contract, not the JS test
 
@@ -37,12 +38,23 @@ Files:
 | `ago.json` | `ago` — pt-PT relative time strings, the minute/hour/day boundaries, the 1-min floor |
 | `search.json` | `norm` (accent/case folding) and `townsMatching` (ranking, the 8-result cap, empty input) |
 | `chains.json` | `chainCounts` (ordering, "Outras" last) and `filterByChain` |
+| `distance.json` | `metresBetween` (haversine, against real reference distances), `formatDistance` (pt-PT rounding and the metre/km bucket boundaries), `sortByDistance` (nearest-first, the no-position case) |
+| `status-filter.json` | `filterByStatus` (statuses-to-keep against `statusOf`, the empty-list-matches-nothing rule) and `statusCounts` (per-status bucket counts, independent of any filter) |
 
 Each file carries the relevant threshold constants as data (e.g.
 `staleAfterMs`, `reconfirmAfterMs`, `hourMs`, `dayMs`) under a top-level
 `"constants"` key. Assert those against your port's own constants *first* —
 if they've drifted, every other case in the file is checked against the
 wrong number and a pass proves nothing.
+
+`distance.json` is the one file where exact equality is the wrong check.
+`metresBetween` goes through `asin`/`sqrt`/trig, and different platforms'
+math libraries can disagree by a fraction of a metre on the same inputs. Its
+`metresBetweenCases` carry `expectedMetres` and the file has a top-level
+`toleranceMetres` — assert `abs(got - expectedMetres) <= toleranceMetres`,
+not `==`. `formatDistanceCases` and `sortByDistanceCases` are plain
+arithmetic/formatting/ordering, not trig, so those stay exact-equality like
+every other vector file.
 
 ### Case shape
 

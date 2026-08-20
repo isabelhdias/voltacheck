@@ -102,3 +102,69 @@ export function chainCounts(machines){
 
   return chains.map(function(c){ return { chain:c, count:counts[c] }; });
 }
+
+/* ───────── distância ───────── */
+
+// Haversine, matching private.metres_between() in schema.sql term for term
+// (same formula, same 12,742,000 m mean earth diameter) — the server-side
+// proximity check on report_machine() and this client-side one must never
+// quietly disagree about how far apart two points are.
+function toRad(deg){ return deg * Math.PI / 180; }
+
+export function metresBetween(lat1, lng1, lat2, lng2){
+  var dLat = toRad(lat2 - lat1);
+  var dLng = toRad(lng2 - lng1);
+  var a = Math.pow(Math.sin(dLat / 2), 2) +
+          Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.pow(Math.sin(dLng / 2), 2);
+  return 12742000 * Math.asin(Math.sqrt(a));
+}
+
+// pt-PT: under 1 km reads as whole metres, rounded to the nearest 10 — no
+// one needs "a 437 m". From 1 km up to 10 km it's kilometres with one
+// decimal and a comma, the Portuguese convention ("a 1,2 km", not "a 1.2
+// km"). Past 10 km, whole kilometres only. The bucket is chosen from the
+// *rounded* value, not the raw one, so a distance like 997 m lands on
+// "a 1,0 km" instead of surfacing as "a 1000 m".
+export function formatDistance(metres){
+  var m = Math.max(0, metres);
+
+  var metres10 = Math.round(m / 10) * 10;
+  if(metres10 < 1000) return "a " + metres10 + " m";
+
+  var km1 = Math.round(m / 100) / 10;
+  if(km1 < 10) return "a " + km1.toFixed(1).replace(".", ",") + " km";
+
+  return "a " + Math.round(m / 1000) + " km";
+}
+
+// New array, nearest machine first. `from` is {lat,lng}; when the user's
+// position isn't known yet, a falsy `from` returns an unsorted copy so
+// callers never need a separate branch for "no fix".
+export function sortByDistance(machines, from){
+  if(!from) return machines.slice();
+  return machines.slice().sort(function(a, b){
+    return metresBetween(from.lat, from.lng, a.lat, a.lng) -
+           metresBetween(from.lat, from.lng, b.lat, b.lng);
+  });
+}
+
+/* ───────── filtro por estado ───────── */
+
+// An empty (or missing) statuses list matches nothing — "all four toggles
+// off" is a real, intentional state, not shorthand for "show everything".
+export function filterByStatus(machines, statuses, now){
+  var wanted = {};
+  (statuses || []).forEach(function(s){ wanted[s] = true; });
+  return machines.filter(function(m){ return wanted[statusOf(m, now)]; });
+}
+
+// How many machines currently fall in each status. Independent of any
+// status filter — callers filter by chain (or whatever else) first, so a
+// toggle can show what turning it *on* would reveal, including one that's
+// currently off. That's what stops a filter combination from being a blind
+// dead end: the count is visible before the tap.
+export function statusCounts(machines, now){
+  var c = { ok:0, full:0, down:0, stale:0 };
+  machines.forEach(function(m){ c[statusOf(m, now)]++; });
+  return c;
+}
