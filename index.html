@@ -76,6 +76,38 @@
     overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
   }
   .tally::-webkit-scrollbar{display:none}
+
+  /* Scroll affordance for .chains and .tally: a soft fade at whichever edge
+     still has chips off-screen, so overflow is never silent. Pure CSS —
+     mask-image driven by a scroll-linked animation, gated behind @supports
+     so a browser that can't evaluate scroll position this way just shows
+     the row unmasked (fully legible, no affordance) instead of a stuck or
+     wrong one. The mask trims the row's own rendered pixels (chips
+     included, not just its background) to transparent, so the last chip
+     visibly dissolves into the paper the topbar already sits on — no new
+     colour, no element that could catch a tap. */
+  @supports (animation-timeline: scroll()) {
+    @keyframes centimo-edge-fade{
+      0%{
+        mask-image:linear-gradient(to right,transparent 0,black 0,black calc(100% - 22px),transparent 100%);
+        -webkit-mask-image:linear-gradient(to right,transparent 0,black 0,black calc(100% - 22px),transparent 100%);
+      }
+      4%,96%{
+        mask-image:linear-gradient(to right,transparent 0,black 22px,black calc(100% - 22px),transparent 100%);
+        -webkit-mask-image:linear-gradient(to right,transparent 0,black 22px,black calc(100% - 22px),transparent 100%);
+      }
+      100%{
+        mask-image:linear-gradient(to right,transparent 0,black 22px,black 100%,transparent 100%);
+        -webkit-mask-image:linear-gradient(to right,transparent 0,black 22px,black 100%,transparent 100%);
+      }
+    }
+    .chains,.tally{
+      animation-name:centimo-edge-fade;
+      animation-timing-function:linear;
+      animation-fill-mode:both;
+      animation-timeline:scroll(self inline);
+    }
+  }
   .tally button{
     flex:none;display:inline-flex;align-items:center;gap:5px;font:inherit;font-size:11px;font-weight:700;
     min-height:44px;background:#fff;border:1px solid var(--line);border-radius:99px;

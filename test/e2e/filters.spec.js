@@ -133,6 +133,63 @@ test.describe('status filter', () => {
   });
 });
 
+test.describe('scroll affordance', () => {
+  // These rows only overflow on a phone-width screen — the 834px viewport
+  // set for the rest of this file fits every chip. Override just for this
+  // block. The affordance is CSS-only (mask-image driven by
+  // animation-timeline: scroll()), so there's no class or attribute to
+  // assert on: this reads the computed mask-image directly, which Chromium
+  // (this suite's browser) resolves from live scroll position.
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  async function maskOf(page, sel) {
+    return page.$eval(sel, (el) => {
+      const cs = getComputedStyle(el);
+      return cs.maskImage !== 'none' ? cs.maskImage : cs.webkitMaskImage;
+    });
+  }
+
+  test('an overflowing row fades on the right by default, and flips to the left once scrolled to the end', async ({ page }) => {
+    await gotoApp(page);
+
+    for (const sel of ['#chains', '#tally']) {
+      const overflows = await page.$eval(sel, (el) => el.scrollWidth > el.clientWidth + 1);
+      expect(overflows, sel + ' should overflow at 390px').toBe(true);
+
+      const atStart = await maskOf(page, sel);
+      expect(atStart, sel + ' default mask').not.toBe('none');
+      // Opaque flush against the left edge (no "0px" transparent-to-black
+      // gap at the very start) — only the right side fades.
+      expect(atStart).toMatch(/^linear-gradient\(to right, rgba\(0, 0, 0, 0\) 0px, rgb\(0, 0, 0\) 0px,/);
+
+      await page.$eval(sel, (el) => { el.scrollLeft = el.scrollWidth; });
+      await page.waitForTimeout(200);
+
+      const atEnd = await maskOf(page, sel);
+      expect(atEnd, sel + ' end mask').not.toBe('none');
+      expect(atEnd).not.toBe(atStart);
+      // Opaque flush against the right edge now — only the left side fades.
+      expect(atEnd).toMatch(/rgb\(0, 0, 0\) 100%, rgba\(0, 0, 0, 0\) 100%\)$/);
+    }
+  });
+
+  test('a row that fits entirely carries no fade', async ({ page }) => {
+    await gotoApp(page);
+    // At 390px the chain row overflows but the status row does not once
+    // scrolled up from the very start of "chains" — instead, prove the
+    // no-overflow case the way filters.spec.js already covers it: pick a
+    // wide viewport where both rows fit, and confirm the mask is absent.
+    await page.setViewportSize({ width: 1400, height: 844 });
+    await page.waitForTimeout(200);
+
+    for (const sel of ['#chains', '#tally']) {
+      const overflows = await page.$eval(sel, (el) => el.scrollWidth > el.clientWidth + 1);
+      expect(overflows, sel + ' should not overflow at 1400px').toBe(false);
+      expect(await maskOf(page, sel)).toBe('none');
+    }
+  });
+});
+
 test.describe('distance', () => {
   test('locating shows a distance in the sheet next to the concelho', async ({ page, context }) => {
     // A stubbed fix, not a real one — Playwright's own geolocation mock, so
