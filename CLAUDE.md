@@ -33,6 +33,14 @@ Roadmap, in priority order:
    four status toggles (`A funcionar` / `Cheias` / `Avariadas` / `Sem
    dados`), composing with the chain chips by AND. Nothing calls
    geolocation except that one existing button tap.
+6. ~~Moderated machine submissions~~ — done. Anonymous insert into
+   `machines` is revoked outright; the "adicionar" form now calls
+   `public.submit_machine()`, which writes to `machine_submissions` — a
+   table anon can neither read nor write. Isabel approves rows in the
+   Supabase Table Editor and a trigger copies them into `machines`.
+   Submitting needs no proximity (people map from home); *reporting* a
+   machine's state still does, now within 2 km. See
+   `docs/supabase-setup.md`.
 
 The app is live and shared — the Supabase project exists, so local mode is
 now the fallback path, not the default.
@@ -100,9 +108,12 @@ report look fresh.
 - `app/main.js` — wires the modules together and boots the app.
 - `seed/machines.js` — the generated `SEED` array (2,444 rows), imported by
   `app/store.js`. Don't edit it by hand: run `python3 tools/import_osm.py`.
-- `schema.sql` — Postgres schema for Supabase (machines, reports) and RLS
-  policies allowing anonymous read and insert. Paste into the Supabase SQL
-  editor; safe to re-run. Note the "Known gap" comment at the bottom.
+- `schema.sql` — Postgres schema for Supabase (machines, reports,
+  machine_submissions) and its RLS policies. Anon reads machines and
+  reports and can call two functions — `report_machine()` and
+  `submit_machine()` — and has no direct write anywhere. Applied by the
+  Migrate workflow, not by hand; safe to re-run. Note the "Known gap"
+  comment at the bottom.
 - `tools/import_osm.py` — the machine importer. Python 3 stdlib, no install.
   Run it to refresh the data; it rewrites `seed/`, including `seed/machines.js`
   directly.
@@ -130,6 +141,15 @@ report look fresh.
 - `.github/workflows/ci.yml` — runs unit, integration, and e2e tests on every
   push to `main`. The only feedback loop Isabel has, since she can't run
   anything locally — read as pass/fail on her phone.
+- `.github/workflows/migrate.yml` — applies `schema.sql` and
+  `seed/machines.sql` to the live database in one transaction, manual
+  trigger only. Runs the integration suite first and verifies row counts
+  and the guard salt afterwards, so the partial-migration incident can't
+  recur. Needs the `SUPABASE_DB_URL` secret (Session pooler string).
+- `.github/workflows/review-queue.yml` — a few times a day, opens or
+  updates one labelled GitHub issue listing pending `machine_submissions`,
+  and closes it when the queue empties. Silent when there's nothing
+  waiting. This is how Isabel finds out something needs approving.
 - `package.json` / `package-lock.json` — test tooling only, never served.
   The app itself still has no build step.
 

@@ -146,7 +146,11 @@ Two fixes went in alongside:
    need if this ever moves server-side.
 4. ~~Filter by chain~~ — done. See below.
 
-All four are done. The Supabase project is live; local mode is now the
+5. ~~Distance and status filters~~ — done.
+6. ~~Moderated machine submissions~~ — done. See
+   `docs/supabase-setup.md` for the review loop.
+
+All six are done. The Supabase project is live; local mode is now the
 fallback, not the default.
 
 ## Filter by chain
@@ -198,12 +202,14 @@ landed.
 
 ## Still needs Isabel
 
-- **Run the updated `schema.sql` again** (adds the `chain` column; every
-  statement is idempotent, safe over the live database) and **re-load
-  `seed/machines.sql`** (backfills `chain` on the 2.444 imported machines via
-  the existing upsert — verified against a snapshot of the live database
-  before writing this, no duplication, machines people added themselves
-  untouched).
+- **Applying the schema is no longer a manual step.** Actions → Migrate →
+  Run workflow applies `schema.sql` and `seed/machines.sql` together in one
+  transaction and verifies the result. Hand-pasting into the SQL editor is
+  now only the first-time bootstrap and the fallback if Actions is down.
+- **Two junk rows from early testing are still live** and want deleting once,
+  by hand, in the Table Editor: a machine named "Teste" at 37.53, -7.44
+  (which is in Spain) and a "Continente" with no town. Nothing can re-create
+  them — anonymous insert into `machines` is revoked — so this is a one-off.
 - The service key for the importer stays local. Never commit it; the repo is
   public and deploys from `main`. (The current importer only reads from
   OpenStreetMap and needs no key at all — it writes files, not rows.)
