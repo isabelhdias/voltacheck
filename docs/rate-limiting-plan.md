@@ -285,12 +285,63 @@ Two real bugs were caught this way and are already fixed above:
 constructs, not catalog functions — they resolve fine unqualified even with
 `search_path = ''`), and the empty-string GUC case throws on the `::json` cast.
 
-**Not verified:** the exact shape of `x-forwarded-for` on a live Supabase
-project — whether it is one address or a comma-separated chain, and whether the
-last element is the real client or an internal hop. There is no Supabase
-project to test against yet. This is why the code hashes the *whole* header
-string rather than `split_part(…, ',', 1)`, and why the IP limit is only a
-backstop. See "Still needs Isabel".
+**Now verified — and the original guess was wrong in a way that mattered.**
+This section used to say the shape of `x-forwarded-for` was unknown, and that
+hashing the whole header string was the cautious choice until someone could
+look. Someone looked. The whole string was the *unsafe* choice.
+
+A temporary probe was installed on the live project, called over REST, and
+dropped again. It reported shape only — element count, per-element family and
+private-or-not, and the names of the visible headers — never an address. What
+it found:
+
+| request sent | what the database saw |
+| --- | --- |
+| no `x-forwarded-for` | 1 element: the real client |
+| `X-Forwarded-For: 1.2.3.4` | 2 elements: `1.2.3.4`, **real client** |
+| `X-Forwarded-For: 9.9.9.9, 8.8.8.8` | 3 elements: both forged, **real client** |
+| `CF-Connecting-IP: 1.2.3.4` | never arrives — Cloudflare 403s it at the edge |
+
+So Supabase sits behind Cloudflare, which **appends** the real connecting
+address rather than replacing the header. Two consequences:
+
+1. **The real client is always the *last* element, never the first.** A
+   spoofer cannot remove it or alter it — only push it further right. Reading
+   `split_part(…, ',', 1)`, which this doc previously floated as the
+   alternative, would have read whatever the *attacker* sent.
+2. **Hashing the whole string was trivially defeatable.** Vary the prefix per
+   request and every request lands in a fresh rate-limit bucket, which is
+   precisely the thing the IP backstop exists to prevent. This was a real
+   hole, not a theoretical one.
+
+The header list also turned up `cf-connecting-ip`, which Cloudflare sets
+itself and refuses to accept from a client — a request that tries to set it is
+rejected with a 403 before Supabase sees it. That is a strictly better source
+than parsing a chain, so `private.client_ip()` prefers it and falls back to
+the last `x-forwarded-for` element if Supabase ever stops fronting with
+Cloudflare:
+
+```sql
+return coalesce(
+  nullif(btrim(hdrs ->> 'cf-connecting-ip'), ''),
+  nullif(btrim(split_part(hdrs ->> 'x-forwarded-for', ',', -1)), ''),
+  'sem-ip');
+```
+
+Both `report_machine()` and `submit_machine()` call it, so there is one
+definition of "who is this" rather than two copies to drift apart.
+
+Three integration tests pin this down (`client_ip: …` in
+`test/integration/api.test.js`), and each was checked against the old
+whole-string code to confirm it actually fails there — the forged-prefix and
+`cf-connecting-ip` tests both do, while "genuinely different clients still get
+different buckets" passes under either, which is correct.
+
+**What this does *not* fix.** The IP limit is still a backstop, not a wall.
+Portuguese mobile networks put many people behind one address, which is why
+the threshold is deliberately loose (300/hour), and anyone determined can
+still change their actual address. Per-device remains the limit doing the real
+work. The change closes a free bypass; it does not make the IP limit strong.
 
 ## Client-side changes in `index.html`
 
@@ -477,24 +528,16 @@ Be honest about this when describing it to anyone.
    `index.html` change first and run the SQL a few minutes later, or accept a
    short window — with a userbase of a few dozen this does not matter, but it
    does once the link is public.
-3. **Check what `x-forwarded-for` actually contains.** This could not be
-   verified without a live project. Install this temporarily, call it once from
-   the browser console on the live site with
-   `supabase.rpc('debug_headers')`, read the value, then drop it:
+3. ~~**Check what `x-forwarded-for` actually contains.**~~ Done — see "Now
+   verified" above. It is a chain, the real client is the last element, and
+   `cf-connecting-ip` is better still. `private.client_ip()` was rewritten
+   accordingly and the probe used to find it out has been removed from both
+   the database and the repo.
 
-   ```sql
-   create or replace function public.debug_headers() returns json
-   language sql stable as $$ select current_setting('request.headers', true)::json $$;
-   grant execute on function public.debug_headers() to anon;
-   -- then, afterwards:
-   -- drop function public.debug_headers();
-   ```
-
-   If it turns out to be a chain like `client, 10.x.x.x`, tell whoever picks
-   this up — the identity may be better built from a specific element than from
-   the whole string. Do not leave `debug_headers` installed; it hands every
-   caller their own headers back, which is harmless, but it is also a habit
-   worth not forming.
+   Worth keeping the method in mind for the next question like this: the probe
+   returned the *shape* of the header rather than its value, so even while it
+   was installed it could not hand anyone an IP. If something similar is ever
+   needed again, build it that way, and take it back out afterwards.
 4. **Decide the numbers.** 2 km, 10 min, 20/hour, 60/day, 300/hour per IP are
    judgement calls, not findings. The proximity radius started at 500 m and
    was widened to 2 km: a large retail park or a shopping centre car park can

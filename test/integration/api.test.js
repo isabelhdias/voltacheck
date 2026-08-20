@@ -78,12 +78,13 @@ if (!dockerAvailable()) {
     machineLng = m.lng;
   });
 
-  async function reportMachine(body, forwardedFor) {
+  async function reportMachine(body, forwardedFor, extraHeaders) {
     const res = await fetch(`${BASE_URL}/rpc/report_machine`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(forwardedFor ? { 'X-Forwarded-For': forwardedFor } : {}),
+        ...(extraHeaders || {}),
       },
       body: JSON.stringify(body),
     });
@@ -163,6 +164,59 @@ if (!dockerAvailable()) {
       '10.20.30.4',
     );
     assert.equal(result, 'far');
+  });
+
+  // How the caller's IP is derived. Measured against the live project with a
+  // temporary probe, not assumed: Cloudflare APPENDS the real connecting
+  // address to whatever x-forwarded-for the client sent, so the real address
+  // is the last element and a spoofer can only push it rightwards. These
+  // three tests pin that reading down — the first is the regression that
+  // matters, since the old code hashed the whole header and so handed anyone
+  // a fresh bucket per request just by varying the prefix.
+  //
+  // Each uses a machine no guard row mentions yet, so the counts below see
+  // only its own two reports, and each report carries its own `device` — the
+  // 10-minute per-(device, machine) cooldown would otherwise reject the
+  // second one, leave no guard row, and make every one of these pass for the
+  // wrong reason.
+
+  function freshMachine() {
+    return superuserScalar(
+      "select id from public.machines where source = 'osm'" +
+        ' and id not in (select machine_id from private.report_guard)' +
+        ' order by id limit 1',
+    );
+  }
+
+  function guardRows(machine) {
+    return superuserScalar(
+      `select count(*) || ':' || count(distinct ip_ident) from private.report_guard where machine_id = '${machine}'`,
+    );
+  }
+
+  test('client_ip: a forged x-forwarded-for prefix cannot change the IP bucket', LONG, async () => {
+    const target = freshMachine();
+    // Same real address last, different forged prefixes — exactly the shape
+    // Cloudflare produces for a client that sent its own header.
+    assert.equal(await reportMachine({ machine: target, state: 'ok', device: 'xff-a' }, '9.9.9.9, 203.0.113.5'), 'ok');
+    assert.equal(await reportMachine({ machine: target, state: 'full', device: 'xff-b' }, '1.1.1.1, 8.8.8.8, 203.0.113.5'), 'ok');
+    assert.equal(guardRows(target), '2:1', 'two reports, one shared IP bucket');
+  });
+
+  test('client_ip: genuinely different clients still get different buckets', LONG, async () => {
+    const target = freshMachine();
+    assert.equal(await reportMachine({ machine: target, state: 'ok', device: 'xff-c' }, '9.9.9.9, 203.0.113.5'), 'ok');
+    assert.equal(await reportMachine({ machine: target, state: 'full', device: 'xff-d' }, '9.9.9.9, 198.51.100.77'), 'ok');
+    assert.equal(guardRows(target), '2:2', 'distinct last elements are distinct clients');
+  });
+
+  test('client_ip: cf-connecting-ip wins over x-forwarded-for', LONG, async () => {
+    const target = freshMachine();
+    // Cloudflare sets cf-connecting-ip itself and rejects forged ones at the
+    // edge, so it is preferred. Same cf value, different xff: one bucket.
+    assert.equal(await reportMachine({ machine: target, state: 'ok', device: 'cf-a' }, '203.0.113.5', { 'CF-Connecting-IP': '198.51.100.9' }), 'ok');
+    assert.equal(await reportMachine({ machine: target, state: 'full', device: 'cf-b' }, '192.0.2.44', { 'CF-Connecting-IP': '198.51.100.9' }), 'ok');
+    assert.equal(guardRows(target), '2:1', 'cf-connecting-ip decides; xff is ignored when it is present');
   });
 
   test('report_machine: 5km away with acc:5000 (iOS approximate location) returns ok', LONG, async () => {

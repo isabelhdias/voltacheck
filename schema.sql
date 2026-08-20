@@ -169,6 +169,43 @@ returns text language sql stable set search_path = '' as $$
     'hex');
 $$;
 
+-- The caller's IP, as trustworthily as this stack allows.
+--
+-- Measured against the live project rather than assumed (see
+-- docs/rate-limiting-plan.md). Two things came out of it:
+--
+--   * Supabase sits behind Cloudflare, which PREPENDS nothing and APPENDS
+--     the real connecting address to whatever `x-forwarded-for` the client
+--     sent. A client sending "9.9.9.9, 8.8.8.8" arrives as
+--     "9.9.9.9, 8.8.8.8, <real>". So the real address is the LAST element,
+--     never the first, and a spoofer cannot remove it — only push it
+--     rightwards. Hashing the whole string, as this used to, handed anyone
+--     a fresh rate-limit bucket per request just by varying the prefix.
+--   * `cf-connecting-ip` is set by Cloudflare itself and cannot be forged:
+--     a request that tries to set it is rejected with a 403 at the edge,
+--     before Supabase ever sees it. That makes it the better source, with
+--     the last `x-forwarded-for` element as the fallback if Supabase ever
+--     stops fronting with Cloudflare.
+--
+-- `true` in current_setting makes this NULL when PostgREST is not the
+-- caller. Once the GUC has been set in a session, resetting it leaves ''
+-- rather than NULL, so strip that too or the ::json cast throws. (Found the
+-- hard way — see testing.)
+create or replace function private.client_ip() returns text
+language plpgsql stable set search_path = pg_catalog as $$
+declare
+  hdrs json;
+begin
+  hdrs := nullif(current_setting('request.headers', true), '')::json;
+  if hdrs is null then
+    return 'sem-ip';
+  end if;
+  return coalesce(
+    nullif(btrim(hdrs ->> 'cf-connecting-ip'), ''),
+    nullif(btrim(split_part(hdrs ->> 'x-forwarded-for', ',', -1)), ''),
+    'sem-ip');
+end $$;
+
 -- Returns one of: ok, cooldown, flood, far, unknown, invalid.
 -- It returns a string rather than raising, so the client can map each case to
 -- its own line of Portuguese without depending on HTTP status plumbing.
@@ -202,12 +239,7 @@ begin
     return 'unknown';
   end if;
 
-  -- `true` makes this NULL when PostgREST is not the caller. Once the GUC has
-  -- been set in a session, resetting it leaves '' rather than NULL, so strip
-  -- that too or the ::json cast throws. (Found the hard way — see testing.)
-  ip := coalesce(
-          nullif(current_setting('request.headers', true), '')::json ->> 'x-forwarded-for',
-          'sem-ip');
+  ip := private.client_ip();
   who_ip := private.guard_hash('ip', ip);
   who    := private.guard_hash('dev', coalesce(nullif(device, ''), ip));
 
@@ -402,9 +434,7 @@ begin
     return 'invalid';
   end if;
 
-  ip := coalesce(
-          nullif(current_setting('request.headers', true), '')::json ->> 'x-forwarded-for',
-          'sem-ip');
+  ip := private.client_ip();
   who_ip := private.guard_hash('ip', ip);
   who    := private.guard_hash('dev', coalesce(nullif(device, ''), ip));
 
