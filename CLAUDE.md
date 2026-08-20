@@ -92,9 +92,8 @@ report look fresh.
   policies allowing anonymous read and insert. Paste into the Supabase SQL
   editor; safe to re-run. Note the "Known gap" comment at the bottom.
 - `tools/import_osm.py` — the machine importer. Python 3 stdlib, no install.
-  Run it to refresh the data; it rewrites `seed/`. (As of the `app/` split
-  above, it still targets the old single-file `SEED` block in `index.html`
-  and needs an update to write `seed/machines.js` instead — not yet done.)
+  Run it to refresh the data; it rewrites `seed/`, including `seed/machines.js`
+  directly.
 - `seed/machines.csv`, `seed/machines.sql` — generated. Load either one into
   Supabase.
 - `docs/seed-data-plan.md` — where the data comes from and how to refresh it.
