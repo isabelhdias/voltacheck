@@ -247,6 +247,33 @@ and 3 above) still exists as a fallback — for the very first setup, before the
 secret exists, or if GitHub Actions itself is ever down. Day to day, the
 Migrate workflow is the normal way to apply a database change.
 
+### If Migrate fails with "tenant/user ... not found"
+
+If the run fails with something like:
+
+```
+FATAL:  (ENOTFOUND) tenant/user postgres.ydtegeetihlhqwjefhyv not found
+```
+
+that is **not** a wrong password, and the project isn't broken. Supabase's
+pooler is regional — a project's login only exists on the pooler host for
+whichever region the project was actually created in. This error means the
+`SUPABASE_DB_URL` secret has the right project ref but a pooler host in the
+wrong region.
+
+Don't go hunting for the connection string again — there's a workflow for
+this. **Actions** tab → **Diagnose DB connection** → **Run workflow**. It
+tries your same username and password against every Supabase pooler region in
+turn and tells you which one answers. When it finds it, open the run's
+**Summary** page: it has the corrected connection string ready to copy, with
+only the password blanked out for you to fill back in. Paste that into the
+`SUPABASE_DB_URL` secret (same steps as setting it the first time, above) and
+re-run Migrate.
+
+It never prints your password or the full secret anywhere, in the log or the
+summary — only region names, whether each one matched, and the corrected
+string with the password replaced by `[YOUR-PASSWORD]`.
+
 ## Once it is live
 
 The app becomes genuinely shared, which changes one thing worth knowing: the
