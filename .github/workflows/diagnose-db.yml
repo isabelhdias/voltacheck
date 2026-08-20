@@ -1,0 +1,188 @@
+name: Diagnose DB connection
+
+# Manual only. This exists for one specific failure: the Migrate workflow's
+# SUPABASE_DB_URL secret has the right project ref and the right username
+# format (postgres.<ref>), but the wrong region in the hostname — Supabase's
+# pooler is regional, so a project's tenant only exists on the pooler for
+# its own region. The fix isn't a new password, it's finding which regional
+# host actually knows this tenant. That's what this workflow automates,
+# because Isabel works from a phone and the Supabase dashboard makes the
+# connection string genuinely hard to find there.
+#
+# This workflow only ever reads SUPABASE_DB_URL and tries `select 1` against
+# a list of candidate hosts. It never touches schema.sql or seed data.
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    name: Diagnose DB connection
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      # Short per-attempt timeout so trying ~17 regions (x2 host prefixes,
+      # worst case) stays a couple of minutes instead of hanging on each
+      # unreachable host for the default 30s+.
+      PGCONNECT_TIMEOUT: "8"
+    steps:
+      - name: Install postgresql-client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      # Splits SUPABASE_DB_URL into its parts once, so every later step can
+      # connect via PGHOST/PGUSER/PGPASSWORD/PGDATABASE (which psql reads on
+      # its own) instead of ever rebuilding a URL or passing anything on a
+      # command line. The password is masked the moment it's known, and
+      # written to GITHUB_ENV only through the multiline-safe delimiter form
+      # — never printed by this step.
+      - name: Parse credentials from SUPABASE_DB_URL
+        run: |
+          python3 - <<'PY'
+          import os
+          import sys
+          import urllib.parse as up
+
+          url = os.environ.get("SUPABASE_DB_URL", "")
+          if not url:
+              print("SUPABASE_DB_URL secret is not set — nothing to diagnose.", file=sys.stderr)
+              sys.exit(1)
+
+          parsed = up.urlparse(url)
+          user = up.unquote(parsed.username or "")
+          password = up.unquote(parsed.password or "")
+          dbname = (parsed.path or "/postgres").lstrip("/") or "postgres"
+          scheme = parsed.scheme or "postgresql"
+
+          if not user or not password:
+              print("Could not parse a username/password out of SUPABASE_DB_URL.", file=sys.stderr)
+              sys.exit(1)
+
+          # Mask first, before the value can end up anywhere else in this
+          # job's log output.
+          print(f"::add-mask::{password}")
+
+          with open(os.environ["GITHUB_ENV"], "a") as f:
+              f.write(f"PG_SCHEME={scheme}\n")
+              f.write(f"PGUSER={user}\n")
+              f.write(f"PGDATABASE={dbname}\n")
+              f.write("PGPASSWORD<<__PGPW_EOF__\n")
+              f.write(password + "\n")
+              f.write("__PGPW_EOF__\n")
+          PY
+
+      # Tries every candidate region, aws-0- first and then aws-1- only if
+      # nothing in aws-0- matched (some newer projects are provisioned on
+      # aws-1- pooler hosts). Credentials only ever travel as PGHOST/PGUSER/
+      # PGPASSWORD/PGDATABASE env vars — psql picks them up on its own, so
+      # nothing secret is ever a command-line argument or inside a URL.
+      # Each attempt's raw stderr is classified with grep and then thrown
+      # away; it is never echoed, so a stray credential in an error string
+      # (Postgres doesn't put one there, but this doesn't rely on that)
+      # still can't reach the log.
+      - name: Find the right pooler region
+        run: |
+          set -uo pipefail
+          # No `set -e`: most attempts in this loop are *expected* to fail
+          # (wrong region) — we classify the failure, not abort on it.
+
+          regions="eu-west-1 eu-west-2 eu-west-3 eu-central-1 eu-central-2 eu-north-1 us-east-1 us-east-2 us-west-1 us-west-2 ca-central-1 sa-east-1 ap-south-1 ap-southeast-1 ap-southeast-2 ap-northeast-1 ap-northeast-2"
+
+          match_prefix=""
+          match_region=""
+          match_outcome=""
+
+          # Classifies one attempt's stderr into a fixed set of outcomes.
+          # Takes the raw text as an argument only to grep it — the caller
+          # never echoes this text, so raw error content (which could in
+          # principle echo back parts of a malformed URL) never reaches the
+          # log either.
+          classify() {
+            local err="$1"
+            if printf '%s' "$err" | grep -qi 'password authentication failed'; then
+              echo "wrong-password"
+            elif printf '%s' "$err" | grep -qiE 'tenant or user not found|could not translate host name|name or service not known|temporary failure in name resolution|nodename nor servname|server does not exist'; then
+              echo "not-this-region"
+            else
+              echo "timeout-or-other"
+            fi
+          }
+
+          try_prefix() {
+            prefix="$1"
+            for region in $regions; do
+              export PGHOST="${prefix}-${region}.pooler.supabase.com"
+              err=$(psql -tAc 'select 1' 2>&1 1>/dev/null)
+              rc=$?
+              if [ "$rc" -eq 0 ]; then
+                echo "$region ($prefix): SUCCESS"
+                match_prefix="$prefix"; match_region="$region"; match_outcome="SUCCESS"
+                return 0
+              fi
+              outcome=$(classify "$err")
+              case "$outcome" in
+                wrong-password)
+                  echo "$region ($prefix): WRONG PASSWORD (but this IS your region)"
+                  match_prefix="$prefix"; match_region="$region"; match_outcome="WRONG PASSWORD (but this IS your region)"
+                  return 0
+                  ;;
+                not-this-region)
+                  echo "$region ($prefix): not this region"
+                  ;;
+                *)
+                  echo "$region ($prefix): timeout / other"
+                  ;;
+              esac
+            done
+            return 1
+          }
+
+          echo "Trying aws-0-<region> hosts..."
+          found=0
+          if try_prefix "aws-0"; then
+            found=1
+          else
+            echo ""
+            echo "No match under aws-0-. Trying aws-1-<region> hosts (newer projects use this prefix)..."
+            if try_prefix "aws-1"; then
+              found=1
+            fi
+          fi
+
+          echo ""
+
+          if [ "$found" -eq 1 ]; then
+            host="${match_prefix}-${match_region}.pooler.supabase.com"
+            corrected="${PG_SCHEME}://${PGUSER}:[YOUR-PASSWORD]@${host}:5432/${PGDATABASE}"
+
+            echo "Region found: $match_region ($match_prefix-) — $match_outcome"
+            echo "Corrected connection string (fill in your real password):"
+            echo "$corrected"
+
+            {
+              echo "## Diagnose DB connection"
+              echo ""
+              echo "**Found it.** Region **$match_region** (\`${host}\`) — $match_outcome."
+              echo ""
+              echo "Paste this into the \`SUPABASE_DB_URL\` secret, with \`[YOUR-PASSWORD]\` replaced by your real database password:"
+              echo ""
+              echo '```'
+              echo "$corrected"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            exit 0
+          else
+            echo "No region matched under aws-0- or aws-1-."
+            echo "The project ref or password may be wrong, or the project may be paused/deleted."
+
+            {
+              echo "## Diagnose DB connection"
+              echo ""
+              echo "**No region matched**, under either \`aws-0-\` or \`aws-1-\`."
+              echo ""
+              echo "That means the tenant \`$PGUSER\` wasn't found on any known Supabase pooler region. Double-check the project ref in \`SUPABASE_DB_URL\` against the Supabase dashboard, and confirm the project still exists and isn't paused."
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            exit 1
+          fi
