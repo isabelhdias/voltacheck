@@ -94,20 +94,29 @@ jobs:
             [ -n "$out" ] && n_no=$((n_no + 1))
           done
 
+          # Report what was PARSED as well as what was applied. Without
+          # this the two failures that look identical from the outside —
+          # "the tick never reached the parser" and "the row was already
+          # dealt with" — both read as a silent zero.
+          n_found=$(printf '%s\n%s\n' "$approved" "$rejected" | grep -c . || true)
+          echo "found=$n_found" >> "$GITHUB_OUTPUT"
           echo "approved=$n_ok" >> "$GITHUB_OUTPUT"
           echo "rejected=$n_no" >> "$GITHUB_OUTPUT"
           echo "Approved $n_ok, rejected $n_no." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Say what happened
-        if: steps.apply.outputs.conflict == '1' || steps.apply.outputs.approved != '0' || steps.apply.outputs.rejected != '0'
+        if: steps.apply.outputs.conflict == '1' || steps.apply.outputs.found != '0'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           N_OK: ${{ steps.apply.outputs.approved }}
           N_NO: ${{ steps.apply.outputs.rejected }}
+          N_FOUND: ${{ steps.apply.outputs.found }}
           CONFLICT: ${{ steps.apply.outputs.conflict }}
         run: |
           if [ "$CONFLICT" = "1" ]; then
             msg="Marcaste aprovar **e** rejeitar na mesma máquina — não fiz nada. Escolhe uma só."
+          elif [ "$N_OK" = "0" ] && [ "$N_NO" = "0" ]; then
+            msg="Li $N_FOUND marcação(ões), mas nenhuma correspondia a uma submissão pendente — já tinha sido tratada."
           else
             msg="Feito: **$N_OK** aprovada(s), **$N_NO** rejeitada(s)."
           fi
