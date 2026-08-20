@@ -220,14 +220,22 @@ begin
   who_ip := private.guard_hash('ip', ip);
   who    := private.guard_hash('dev', coalesce(nullif(device, ''), ip));
 
-  -- Proximity. `acc` is the browser's own accuracy radius in metres, and it is
+  -- Proximity, 2 km. The point of this check was never to prove someone is
+  -- standing at the machine — it's to accept a fresh *observation*: someone
+  -- who just left the shop, reporting from the car park or a couple of
+  -- minutes down the road on foot or by car, while still rejecting a report
+  -- from across the region, which isn't an observation of this machine at
+  -- all. `acc` is the browser's own accuracy radius in metres, and it is
   -- deliberately not capped: with iOS Precise Location off the radius is
   -- 1-20 km, and capping it would reject those people while stopping nobody
   -- who is lying — a liar picks the coordinates too. Missing coordinates are
   -- accepted; blocking real reports is worse than letting a few bad ones in.
+  -- And because this whole check fails open, it only ever constrains someone
+  -- who shares their real location in the first place — being generous here
+  -- costs nothing against anyone actually determined to lie.
   if lat is not null and lng is not null then
     slack := greatest(coalesce(acc, 0), 0);
-    if private.metres_between(lat, lng, m_lat, m_lng) > 500 + slack then
+    if private.metres_between(lat, lng, m_lat, m_lng) > 2000 + slack then
       return 'far';
     end if;
   end if;
