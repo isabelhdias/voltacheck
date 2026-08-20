@@ -204,6 +204,15 @@ workflow.
    password (the one you saved when creating the project) where it says
    `[YOUR-PASSWORD]`.
 
+   > **Copy it verbatim. Don't retype it, and don't build it from an example
+   > you saw somewhere — including one someone hands you in a chat.** The
+   > hostname contains two things that cannot be guessed or reasoned about:
+   > the region, and a generation prefix (`aws-0-` or `aws-1-`) that depends
+   > on when the project was created. Both look plausible whichever value they
+   > have, and getting either wrong produces an error that reads like a
+   > credentials problem but isn't. The password is the only part you should
+   > ever be editing.
+
    **This has to be the Session pooler string, not the other two Supabase
    offers.** The three look similar but only one works here:
    - **Direct connection** — fails. It only accepts IPv6 by default, and the
@@ -255,11 +264,22 @@ If the run fails with something like:
 FATAL:  (ENOTFOUND) tenant/user postgres.ydtegeetihlhqwjefhyv not found
 ```
 
-that is **not** a wrong password, and the project isn't broken. Supabase's
-pooler is regional — a project's login only exists on the pooler host for
-whichever region the project was actually created in. This error means the
-`SUPABASE_DB_URL` secret has the right project ref but a pooler host in the
-wrong region.
+that is **not** a wrong password, and the project isn't broken. It means the
+`SUPABASE_DB_URL` secret has the right project ref but the wrong pooler
+*host*. Two separate things in that hostname can be wrong, and the error is
+identical either way:
+
+- **The region.** A project's login only exists on the pooler for the region
+  it was created in.
+- **The generation prefix — `aws-0-` vs `aws-1-`.** Supabase runs more than
+  one pooler per region and puts newer projects on `aws-1-`. Both hostnames
+  resolve, so this looks completely fine and fails anyway.
+
+The second one is the easier trap, because the region is something you can
+look up and check while the prefix is not. It is what actually happened here:
+the region (`eu-west-1`, West EU Ireland) was correct all along, and the
+secret had been built from an example that said `aws-0-`. Changing that single
+character to `aws-1-` fixed it.
 
 Don't go hunting for the connection string again — there's a workflow for
 this. **Actions** tab → **Diagnose DB connection** → **Run workflow**. It
