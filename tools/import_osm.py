@@ -7,7 +7,7 @@ things and nothing else:
 
     seed/machines.csv   — paste-free import via Supabase → Table editor → Import
     seed/machines.sql   — same data as an upsert, for the SQL editor
-    index.html          — rewrites the SEED block used by local mode
+    seed/machines.js    — the `SEED` ES module local mode imports
 
 The app itself stays a single static index.html with no build step. This script
 is a one-off generator; its output is committed.
@@ -309,18 +309,19 @@ on conflict (external_id) do update set
         fh.write(head + values + tail)
 
 
-SEED_START = "  /* ── SEED START — gerado por tools/import_osm.py ──"
-SEED_END = "  /* ── SEED END ── */"
+def write_seed_module(rows, path):
+    """Write seed/machines.js — the `SEED` ES module local mode imports.
 
-
-def write_seed_block(rows, path):
+    © OpenStreetMap contributors, ODbL — generated, not hand-edited; a
+    re-run overwrites it. One row per line so git diffs stay readable.
+    """
     lines = [
-        SEED_START,
-        "     {} máquinas do OpenStreetMap (ODbL). Não editar à mão:".format(len(rows)),
-        "     correr `python3 tools/import_osm.py` outra vez.",
-        "     [nome, lat, lng, concelho, cadeia, id OSM]",
-        "     ──────────────────────────────────────────────────── */",
-        "  var SEED = [",
+        "/* ── SEED — gerado por tools/import_osm.py ──",
+        "   {} máquinas do OpenStreetMap (ODbL). Não editar à mão:".format(len(rows)),
+        "   correr `python3 tools/import_osm.py` outra vez.",
+        "   [nome, lat, lng, concelho, cadeia, id OSM]",
+        "   ──────────────────────────────────────────────────── */",
+        "export const SEED = [",
     ]
     for i, r in enumerate(rows):
         comma = "," if i < len(rows) - 1 else ""
@@ -331,24 +332,10 @@ def write_seed_block(rows, path):
             json.dumps(r["chain"], ensure_ascii=False),
             r["osm_id"], comma,
         ))
-    lines.append("  ];")
-    lines.append(SEED_END)
-    block = "\n".join(lines)
-
-    with open(path, encoding="utf-8") as fh:
-        html = fh.read()
-
-    pattern = re.compile(
-        re.escape(SEED_START) + r".*?" + re.escape(SEED_END), re.S
-    )
-    if not pattern.search(html):
-        sys.exit(
-            f"could not find the SEED block markers in {path}.\n"
-            f"Expected a line starting with: {SEED_START.strip()}"
-        )
+    lines.append("];")
 
     with open(path, "w", encoding="utf-8") as fh:
-        fh.write(pattern.sub(lambda _: block, html, count=1))
+        fh.write("\n".join(lines) + "\n")
 
 
 # ───────────────────────── main ─────────────────────────
@@ -381,7 +368,7 @@ def main():
     os.makedirs(os.path.join(ROOT, "seed"), exist_ok=True)
     write_csv(rows, os.path.join(ROOT, "seed", "machines.csv"))
     write_sql(rows, os.path.join(ROOT, "seed", "machines.sql"))
-    write_seed_block(rows, os.path.join(ROOT, "index.html"))
+    write_seed_module(rows, os.path.join(ROOT, "seed", "machines.js"))
 
     towns = sorted({r["town"] for r in rows if r["town"]})
     named = sum(1 for r in rows if r["chain"] != "Outras")
@@ -392,7 +379,7 @@ def main():
         print(f"  {approx} sem concelho exacto — usado o mais próximo")
     print(f"  {named}/{len(rows)} com cadeia identificada ({100*named/len(rows):.0f}%)")
     print()
-    print("  wrote seed/machines.csv, seed/machines.sql, and the SEED block in index.html")
+    print("  wrote seed/machines.csv, seed/machines.sql, and seed/machines.js")
 
 
 if __name__ == "__main__":
