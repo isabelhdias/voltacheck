@@ -210,6 +210,62 @@ test.describe('distance', () => {
     expect(addr).toMatch(/a \d+(,\d)? ?(m|km)$/);
   });
 
+  // What Isabel actually hit: tapping locate and being told
+  // "não consegui obter a localização". The machines are inside
+  // supermarkets, which is exactly where a high-accuracy fix is least
+  // likely to arrive, so a first failure must fall back to the coarse
+  // network fix rather than giving up.
+  test('locate falls back to a coarse fix when the precise one fails', async ({ page, context }) => {
+    await context.grantPermissions(['geolocation']);
+    await gotoApp(page);
+
+    // Fail any enableHighAccuracy request with TIMEOUT (code 3), answer the
+    // coarse retry. Stubbing navigator directly, so nothing touches a real
+    // device or network.
+    await page.evaluate(() => {
+      const real = navigator.geolocation.getCurrentPosition.bind(navigator.geolocation);
+      window.__calls = [];
+      navigator.geolocation.getCurrentPosition = function (ok, fail, opts) {
+        window.__calls.push(!!(opts && opts.enableHighAccuracy));
+        if (opts && opts.enableHighAccuracy) {
+          setTimeout(() => fail({ code: 3, message: 'timeout' }), 10);
+          return;
+        }
+        setTimeout(() => ok({ coords: { latitude: 38.7223, longitude: -9.1393, accuracy: 1200 } }), 10);
+        return real;
+      };
+    });
+
+    await page.click('#locate');
+    await page.waitForTimeout(1200);
+
+    expect(await page.evaluate(() => window.__calls)).toEqual([true, false]);
+
+    const box = await centerPin(page);
+    expect(box, 'no pin in view to click').not.toBeNull();
+    await page.mouse.click(box.x, box.y);
+    await page.waitForTimeout(500);
+    // The coarse fix still produces a distance — the point of the fallback.
+    expect((await page.textContent('#s-addr')).trim()).toMatch(/a \d+(,\d)? ?(m|km)$/);
+  });
+
+  test('a refused permission is not retried, and says so', async ({ page, context }) => {
+    await gotoApp(page);
+    await page.evaluate(() => {
+      window.__calls = 0;
+      navigator.geolocation.getCurrentPosition = function (ok, fail) {
+        window.__calls++;
+        setTimeout(() => fail({ code: 1, message: 'denied' }), 10);
+      };
+    });
+
+    await page.click('#locate');
+    await page.waitForTimeout(800);
+
+    expect(await page.evaluate(() => window.__calls), 'a denial must not be retried').toBe(1);
+    expect(await page.textContent('#toast')).toMatch(/bloqueada/i);
+  });
+
   test('without locating, the sheet shows no distance', async ({ page }) => {
     await gotoApp(page);
     const box = await centerPin(page);

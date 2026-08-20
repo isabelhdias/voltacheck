@@ -121,17 +121,40 @@ saveBtn.addEventListener("click", async function(){
 document.getElementById("locate").addEventListener("click", function(){
   if(!navigator.geolocation){ ui.toast("Localização indisponível neste dispositivo"); return; }
   ui.toast("A procurar-te…");
+
+  function found(p){
+    store.setUserPos({ lat:p.coords.latitude, lng:p.coords.longitude });
+    map.setView([p.coords.latitude, p.coords.longitude], 15);
+    draw();
+    // Refreshes the open sheet, if any, so its distance line appears
+    // without waiting for the next tap.
+    if(store.selected) ui.select(store.selected);
+  }
+
+  // Ask for GPS first, but fall back to the coarse network fix. This matters
+  // more here than it looks: the machines are inside supermarkets, so the
+  // place someone taps this is the place a precise fix is least likely to
+  // arrive before the timeout. Coarse is entirely good enough for framing
+  // the map, and a failed high-accuracy attempt used to be the end of it.
+  //
+  // A refused permission is the one case not worth retrying — it fails the
+  // same way instantly — and it is also the only one the person can fix, so
+  // it gets its own message instead of the generic one.
+  function retryCoarse(err){
+    if(err && err.code === 1){
+      ui.toast("Localização bloqueada. Ativa-a nas definições do browser.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      found,
+      function(){ ui.toast("Não consegui obter a localização. Arrasta o mapa."); },
+      { enableHighAccuracy:false, timeout:15000, maximumAge:300000 }
+    );
+  }
+
   navigator.geolocation.getCurrentPosition(
-    function(p){
-      store.setUserPos({ lat:p.coords.latitude, lng:p.coords.longitude });
-      map.setView([p.coords.latitude, p.coords.longitude], 15);
-      draw();
-      // Refreshes the open sheet, if any, so its distance line appears
-      // without waiting for the next tap.
-      if(store.selected) ui.select(store.selected);
-    },
-    function(){ ui.toast("Não consegui obter a localização"); },
-    { enableHighAccuracy:true, timeout:8000 }
+    found, retryCoarse,
+    { enableHighAccuracy:true, timeout:8000, maximumAge:60000 }
   );
 });
 
