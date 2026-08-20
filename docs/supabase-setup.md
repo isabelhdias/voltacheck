@@ -5,7 +5,7 @@ Until it is done the site runs in local mode — which works, and shows all 2.44
 machines, but reports stay on each person's own device and nobody sees anyone
 else's.
 
-You can do all of this from an iPad. There is no CLI, no terminal, and nothing
+You can do all of this from a phone. There is no CLI, no terminal, and nothing
 to install anywhere.
 
 Rough order, about twenty minutes:
@@ -59,7 +59,7 @@ rate-limiting salt.
 
 ## 3. Load the machines
 
-Two ways. The first is easier on an iPad.
+Two ways. The first is easier on a phone.
 
 **CSV (recommended).** Open [`seed/machines.csv`](../seed/machines.csv) on
 GitHub, tap **Raw**, then share/download it to your Files app.
