@@ -168,3 +168,41 @@ export function statusCounts(machines, now){
   machines.forEach(function(m){ c[statusOf(m, now)]++; });
   return c;
 }
+
+/* ───────── concelho sugerido ───────── */
+
+// The concelho of the nearest machine, but only when that machine is close
+// enough for the guess to be worth anything.
+//
+// This exists to PREFILL a field the person can see and correct, not to
+// decide the answer. The database used to derive a submission's concelho
+// from its nearest machine unconditionally, and the first real submission
+// landed 18.8 km from its neighbour and was filed under the wrong concelho —
+// wrong in a way nobody would notice until a town search came up empty.
+// Suggesting it in a visible field fixes the visibility; the radius fixes
+// the suggestion.
+//
+// Returns "" when there is nothing close, which is the signal to leave the
+// field empty rather than put a guess in front of someone as if it were
+// known.
+export function suggestTown(machines, lat, lng, within){
+  var limit = within == null ? 2000 : within;
+  var best = null, bestD = Infinity, d;
+  (machines || []).forEach(function(m){
+    if(!m || !m.town) return;
+    d = metresBetween(lat, lng, m.lat, m.lng);
+    if(d < bestD){ bestD = d; best = m; }
+  });
+  return (best && bestD <= limit) ? best.town : "";
+}
+
+// Every distinct concelho currently on the map, sorted, for the datalist
+// behind the concelho field. Suggestions only — somewhere with no machine
+// yet is still a legitimate answer, so the field stays free text.
+export function knownTowns(machines){
+  var seen = {}, out = [];
+  (machines || []).forEach(function(m){
+    if(m && m.town && !seen[m.town]){ seen[m.town] = true; out.push(m.town); }
+  });
+  return out.sort(function(a, b){ return norm(a) < norm(b) ? -1 : 1; });
+}

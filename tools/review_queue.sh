@@ -34,8 +34,9 @@ rows=$(psql "$SUPABASE_DB_URL" -t -A -F $'\x1f' -c "
     id,
     translate(name, chr(10) || chr(13) || '<>', '  '),
     coalesce(chain, 'sem cadeia'),
-    coalesce(translate(town, chr(10) || chr(13) || '<>', '  '), 'sem localidade'),
+    coalesce(translate(town, chr(10) || chr(13) || '<>', '  '), ''),
     coalesce(translate(note, chr(10) || chr(13) || '<>', '  '), ''),
+    coalesce(translate(address, chr(10) || chr(13) || '<>', '  '), ''),
     coalesce(translate(near_name, chr(10) || chr(13) || '<>', '  '), ''),
     coalesce(round(near_metres)::text, ''),
     likely_dupe,
@@ -90,7 +91,7 @@ body_file="$(mktemp)"
 # action to the id rather than to a row number matters — the queue is
 # re-rendered whenever it changes, so any position-based reference could
 # point at a different machine by the time it is used.
-while IFS=$'\x1f' read -r id name chain town note near_name near_metres likely_dupe from_metres maps_url created_at; do
+while IFS=$'\x1f' read -r id name chain town note address near_name near_metres likely_dupe from_metres maps_url created_at; do
   [ -n "$id" ] || continue
 
   marker=""
@@ -112,11 +113,24 @@ while IFS=$'\x1f' read -r id name chain town note near_name near_metres likely_d
     from_line="📍 Sem localização de quem submeteu"
   fi
 
+  # A blank concelho is called out rather than papered over. It means the
+  # submitter left it empty and there was no machine within 2 km to borrow
+  # one from, so the machine will not show up in a town search until someone
+  # fills it in — worth seeing at review time, when it is cheap to fix.
+  if [ -n "$town" ]; then
+    where="${town}"
+  else
+    where="⚠ sem concelho"
+  fi
+
   {
     echo ""
-    echo "### ${marker}${name} — ${chain} (${town})"
+    echo "### ${marker}${name} — ${chain} (${where})"
     echo "- ${near_line}"
     echo "- ${from_line}"
+    if [ -n "$address" ]; then
+      echo "- 🏠 ${address}"
+    fi
     if [ -n "$note" ]; then
       echo "- Nota: ${note}"
     fi

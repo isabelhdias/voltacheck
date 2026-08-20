@@ -41,6 +41,7 @@ test.describe('add machine form — local mode', () => {
     await page.fill('#add-name', 'Lidl Teste E2E');
     await page.selectOption('#add-chain', 'Lidl');
     await page.fill('#add-note', 'ao lado da entrada');
+    await expect(page.locator('#add-town')).not.toHaveValue('');
 
     await expect(page.locator('#add-name')).toHaveValue('Lidl Teste E2E');
     await expect(page.locator('#add-chain')).toHaveValue('Lidl');
@@ -153,6 +154,8 @@ test.describe('add machine form — live mode (locally faked, never reaches Supa
     await page.click('#add');
     await page.fill('#add-name', 'Submissão Ao Vivo Teste');
     await page.selectOption('#add-chain', 'Continente');
+    await page.fill('#add-town', 'Oeiras');
+    await page.fill('#add-address', 'Av. Marginal 3');
     await page.fill('#add-note', 'perto da caixa');
     await page.click('#add-save');
     await page.waitForTimeout(600);
@@ -172,9 +175,53 @@ test.describe('add machine form — live mode (locally faked, never reaches Supa
     expect(submit.args.name).toBe('Submissão Ao Vivo Teste');
     expect(submit.args.chain).toBe('Continente');
     expect(submit.args.note).toBe('perto da caixa');
+    // The two fields this form grew so the database stops guessing them.
+    expect(submit.args.town).toBe('Oeiras');
+    expect(submit.args.address).toBe('Av. Marginal 3');
     expect(submit.args.from_lat).toBeNull();
     expect(submit.args.from_lng).toBeNull();
 
     expect(realHits, realHits.join(' | ')).toEqual([]);
   });
+});
+
+test.describe('add machine form — concelho', () => {
+  test('prefills the concelho from a machine nearby, and offers the known ones', async ({ page }) => {
+    await gotoApp(page);
+    await page.click('#add');
+
+    // Opening the form over the seeded map should propose something rather
+    // than leaving the person to type a concelho they are standing in.
+    const suggested = await page.inputValue('#add-town');
+    expect(suggested, 'expected a concelho prefilled from a nearby machine').not.toBe('');
+
+    // The datalist is built from the map, not hardcoded in index.html.
+    const options = await page.$$eval('#towns option', (els) => els.map((e) => e.value));
+    expect(options.length).toBeGreaterThan(10);
+    expect(options).toContain(suggested);
+    expect(new Set(options).size, 'each concelho should appear once').toBe(options.length);
+  });
+
+  test('refuses to submit without a concelho, and says why', async ({ page }) => {
+    await gotoApp(page);
+    const before = await page.locator('.pin').count();
+
+    await page.click('#add');
+    await page.fill('#add-name', 'Sem Concelho Nenhum');
+    await page.fill('#add-town', '');
+    await page.click('#add-save');
+    await page.waitForTimeout(400);
+
+    await expect(page.locator('.toast')).toContainText('concelho');
+    await expect(page.locator('body'), 'the form must stay open').toHaveClass(/adding/);
+    expect(await page.locator('.pin').count()).toBe(before);
+  });
+
+  // The "nothing nearby, so suggest nothing" case — the Pampilhosa bug —
+  // is covered by test/vectors/town-suggestion.json rather than here.
+  // Reaching it in the browser would mean moving the map hundreds of km
+  // from every seeded machine, and the only way to do that from a spec is
+  // to expose the Leaflet instance on window. Test-only surface in the
+  // shipped app is a worse trade than asserting the same rule where it
+  // actually lives.
 });

@@ -378,6 +378,24 @@ create index if not exists submission_guard_ip    on private.submission_guard (i
 -- adding a machine from home with accurate coordinates is legitimate and
 -- welcome, unlike reporting a status you didn't see. `from_lat`/`from_lng`,
 -- when given, are recorded only as a review signal (`from_metres`), never
+
+-- Grew a column: what the submitter typed as the street address. Nothing
+-- filled machines.address before — OSM carries no street address for these
+-- — but a person adding a machine knows where it is, and typing it is
+-- cheaper than any amount of guessing.
+alter table machine_submissions add column if not exists address text;
+
+-- The parameter list changed (town and address are now passed in rather
+-- than derived), and `create or replace` cannot change a function's
+-- signature — it would leave the old one in place as a second overload.
+-- PostgREST then sees two candidates for /rpc/submit_machine and answers
+-- 300 Multiple Choices for every call, which is a total outage of the add
+-- form rather than a subtle drift. Drop the previous signature by name
+-- first; `if exists` keeps this safe on a fresh database.
+drop function if exists public.submit_machine(
+  text, double precision, double precision, text, text,
+  double precision, double precision, double precision, text);
+
 -- used to accept or reject.
 create or replace function public.submit_machine(
   name      text,
@@ -385,6 +403,8 @@ create or replace function public.submit_machine(
   lng       double precision,
   chain     text default null,
   note      text default null,
+  town      text default null,
+  address   text default null,
   from_lat  double precision default null,
   from_lng  double precision default null,
   from_acc  double precision default null,
@@ -402,6 +422,8 @@ declare
   v_note    text;
   v_chain   text;
   v_town    text;
+  v_address text;
+  n_town    text;
   n_id      uuid;
   n_name    text;
   n_metres  double precision;
@@ -409,9 +431,11 @@ declare
   n         integer;
   new_id    uuid;
 begin
-  v_name  := trim(coalesce(name, ''));
-  v_note  := nullif(trim(coalesce(note, '')), '');
-  v_chain := nullif(trim(coalesce(chain, '')), '');
+  v_name    := trim(coalesce(name, ''));
+  v_note    := nullif(trim(coalesce(note, '')), '');
+  v_chain   := nullif(trim(coalesce(chain, '')), '');
+  v_town    := nullif(trim(coalesce(town, '')), '');
+  v_address := nullif(trim(coalesce(address, '')), '');
 
   if length(v_name) < 3 or length(v_name) > 80 then
     return 'invalid';
@@ -419,6 +443,12 @@ begin
   -- 140 chars — a short line ("ao lado da entrada"), not a place for a
   -- review essay. Room for review notes lives in the dashboard, not here.
   if v_note is not null and length(v_note) > 140 then
+    return 'invalid';
+  end if;
+  if v_town is not null and length(v_town) > 60 then
+    return 'invalid';
+  end if;
+  if v_address is not null and length(v_address) > 120 then
     return 'invalid';
   end if;
   if lat is null or lng is null then
@@ -470,10 +500,18 @@ begin
    where g.ip_ident = who_ip and g.created_at > now() - interval '1 hour';
   if n >= 40 then return 'flood'; end if;
 
-  -- Nearest existing machine. Source of the derived town — a new machine is
-  -- essentially always in its neighbour's concelho, which avoids putting
-  -- boundary geometry in the database — and of the duplicate-detection
-  -- signal below.
+  -- Nearest existing machine. Source of the duplicate-detection signal
+  -- below, and a last-resort fallback for the concelho.
+  --
+  -- It used to be the *only* source of the concelho, on the reasoning that a
+  -- new machine is essentially always in its neighbour's. The first real
+  -- submission broke that: the nearest machine was 18.8 km away, in a
+  -- different concelho, and the submission was filed under it — so the town
+  -- search would not have found it under the name it was given. The town now
+  -- comes from whoever submitted it, and this is only consulted when they
+  -- left it blank AND the neighbour is close enough for the assumption to
+  -- hold. Otherwise it stays null, which is honest and visible in review,
+  -- rather than confidently wrong and invisible.
   --
   -- `submit_machine.lat`/`.lng` below, not bare `lat`/`lng`: this query's
   -- FROM clause touches public.machines, which itself has lat/lng columns,
@@ -482,21 +520,27 @@ begin
   -- is the documented way to point at the parameter instead.
   select m.id, m.name, m.town,
          private.metres_between(submit_machine.lat, submit_machine.lng, m.lat, m.lng)
-    into n_id, n_name, v_town, n_metres
+    into n_id, n_name, n_town, n_metres
     from public.machines m
    order by private.metres_between(submit_machine.lat, submit_machine.lng, m.lat, m.lng) asc
    limit 1;
+
+  -- 2 km, the same radius report_machine() treats as "near this machine".
+  -- Inside it, two machines really are almost always in one concelho.
+  if v_town is null and n_metres is not null and n_metres <= 2000 then
+    v_town := n_town;
+  end if;
 
   if from_lat is not null and from_lng is not null then
     f_metres := private.metres_between(from_lat, from_lng, lat, lng);
   end if;
 
   insert into public.machine_submissions
-    (name, chain, note, lat, lng, town, from_lat, from_lng, from_acc, from_metres,
-     near_id, near_name, near_metres, likely_dupe)
+    (name, chain, note, lat, lng, town, address, from_lat, from_lng, from_acc,
+     from_metres, near_id, near_name, near_metres, likely_dupe)
   values
-    (v_name, v_chain, v_note, lat, lng, v_town, from_lat, from_lng, from_acc, f_metres,
-     n_id, n_name, n_metres, coalesce(n_metres < 75, false))
+    (v_name, v_chain, v_note, lat, lng, v_town, v_address, from_lat, from_lng,
+     from_acc, f_metres, n_id, n_name, n_metres, coalesce(n_metres < 75, false))
   returning id into new_id;
 
   insert into private.submission_guard (ident, ip_ident) values (who, who_ip);
@@ -505,8 +549,8 @@ begin
 end;
 $$;
 
-revoke all on function public.submit_machine(text, double precision, double precision, text, text, double precision, double precision, double precision, text) from public;
-grant execute on function public.submit_machine(text, double precision, double precision, text, text, double precision, double precision, double precision, text) to anon, authenticated;
+revoke all on function public.submit_machine(text, double precision, double precision, text, text, text, text, double precision, double precision, double precision, text) from public;
+grant execute on function public.submit_machine(text, double precision, double precision, text, text, text, text, double precision, double precision, double precision, text) to anon, authenticated;
 
 -- Promote an approved submission into a real machine. Idempotent by
 -- checking machine_id is still null before inserting — toggling status back
@@ -521,8 +565,8 @@ declare
   new_machine_id uuid;
 begin
   if new.status = 'approved' and new.machine_id is null then
-    insert into public.machines (name, chain, town, lat, lng, source, external_id)
-    values (new.name, new.chain, new.town, new.lat, new.lng, 'user', null)
+    insert into public.machines (name, chain, town, address, lat, lng, source, external_id)
+    values (new.name, new.chain, new.town, new.address, new.lat, new.lng, 'user', null)
     returning id into new_machine_id;
     new.machine_id := new_machine_id;
   end if;

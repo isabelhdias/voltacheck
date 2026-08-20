@@ -39,8 +39,15 @@ Roadmap, in priority order:
    table anon can neither read nor write. Isabel approves rows in the
    Supabase Table Editor and a trigger copies them into `machines`.
    Submitting needs no proximity (people map from home); *reporting* a
-   machine's state still does, now within 2 km. See
+   machine's state still does, now within 2 km. Approving is a checkbox in
+   the review-queue issue, not a trip to the Table Editor. See
    `docs/supabase-setup.md`.
+7. ~~Set the machine's details instead of inferring them~~ — done. The form
+   now asks for the concelho (prefilled from a machine within 2 km, and
+   left blank when there is none) and an optional address, and
+   `submit_machine()` stores what was typed. It used to derive the concelho
+   from the nearest machine at any distance, which filed the first real
+   submission 18.8 km away under the wrong one.
 
 The app is live and shared — the Supabase project exists, so local mode is
 now the fallback path, not the default.
@@ -89,7 +96,8 @@ report look fresh.
   tunables (`STALE_AFTER`, `RECONFIRM_AFTER`, `LOOKBACK_H`, colours, labels).
   Isabel pastes her Supabase values in here, not in `index.html`.
 - `app/domain.js` — pure status/search logic (decay, reconfirm threshold,
-  town search, chain filtering, distance, status filtering). No
+  town search, chain filtering, distance, status filtering, concelho
+  suggestion). No
   `document`/`window`/`localStorage`/`navigator`/`fetch` — this is the spec
   an iOS/Android port would mirror, and what `node --test` unit-tests
   directly.
