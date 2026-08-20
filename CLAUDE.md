@@ -33,10 +33,16 @@ now the fallback path, not the default.
 
 ## Hard constraints
 
-- **Single static `index.html`. No build step.** Isabel works mostly from an
-  iPad and cannot run a local dev server, so anything requiring a local
-  toolchain to see the result is a non-starter. Deployed by GitHub Pages
-  from `main`.
+- **No build step for the app.** Isabel works entirely from a phone and
+  cannot run a local dev server, so anything requiring a local toolchain to
+  see the result is a non-starter. What ships is plain files served by GitHub
+  Pages from `main` — ES modules load natively in the browser, nothing is
+  compiled or bundled. Test tooling in `package.json` is dev-only and never
+  reaches a user.
+- **Keep files small enough to read on a phone.** This replaced the original
+  "single static index.html" rule for the reason that rule existed: a 243 KB
+  file is unopenable in GitHub's mobile web view. Prefer several short
+  modules over one long file.
 - **Ask before adding any dependency or build tooling.** Leaflet and
   supabase-js load from CDN; that's the whole stack.
 - **The local-mode fallback must keep working.** The CONFIG block at the top of
@@ -79,10 +85,19 @@ report look fresh.
 
 ## Working style
 
+**This project is worked fully through agents. Isabel does not edit code and
+is on a phone.** Plan the work, dispatch agents to implement it, and verify
+their output yourself before reporting it as done — do not hand her a diff to
+check. Treat CI as the thing that proves a change is good, because she cannot
+run anything locally.
+
 - Small, single-purpose commits with clear messages, pushed to `main` so Isabel
   can check each one on her phone. No PRs unless asked.
 - Say plainly when a step needs something only Isabel can do — creating the
-  Supabase project, pasting keys, widening the session network policy.
+  Supabase project, pasting keys, widening the session network policy. Keep
+  that list as short as possible; every manual step is one she has to do by
+  hand on a phone, and it is where mistakes have actually happened (a schema
+  migration ran without its data reload and shipped an empty column).
 - On external data sources: flag terms-of-use problems rather than working
   around them.
 
