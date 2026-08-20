@@ -82,16 +82,22 @@ jobs:
 
           # `and status = 'pending'` makes each update a no-op the second
           # time round, so a redraw that races a tick cannot double-apply.
+          # -q matters, and is not cosmetic: without it psql prints the
+          # command tag ("UPDATE 0") on stdout even when nothing matched,
+          # so a test for non-empty output is true whether or not a row
+          # changed. That reported a fake uuid as "1 aprovada" — the exact
+          # false success this counting exists to rule out. With -q the
+          # only thing on stdout is what RETURNING produced.
           for id in $approved; do
-            out=$(psql "$SUPABASE_DB_URL" -t -A -v ON_ERROR_STOP=1 \
+            out=$(psql "$SUPABASE_DB_URL" -q -t -A -v ON_ERROR_STOP=1 \
               -c "update public.machine_submissions set status = 'approved', reviewed_at = now() where id = '$id' and status = 'pending' returning 1")
-            [ -n "$out" ] && n_ok=$((n_ok + 1))
+            [ "$out" = "1" ] && n_ok=$((n_ok + 1))
           done
 
           for id in $rejected; do
-            out=$(psql "$SUPABASE_DB_URL" -t -A -v ON_ERROR_STOP=1 \
+            out=$(psql "$SUPABASE_DB_URL" -q -t -A -v ON_ERROR_STOP=1 \
               -c "update public.machine_submissions set status = 'rejected', reviewed_at = now() where id = '$id' and status = 'pending' returning 1")
-            [ -n "$out" ] && n_no=$((n_no + 1))
+            [ "$out" = "1" ] && n_no=$((n_no + 1))
           done
 
           # Report what was PARSED as well as what was applied. Without
