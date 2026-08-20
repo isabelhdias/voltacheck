@@ -340,3 +340,26 @@ and waits for you to look at it. Here's the whole loop, end to end.
 Once you've dealt with everything in the issue, the next scheduled run (or a
 manual **Run workflow** if you don't want to wait) sees the queue is empty
 and closes it on its own — you don't need to close it yourself.
+
+### The one way this alerting can go quiet
+
+**GitHub disables scheduled workflows after 60 days without a commit to the
+repository.** It's a platform-wide rule for saving runner time on dormant
+repos, not something wrong with ours, and it hits `Review queue` — the only
+workflow here that runs on a schedule.
+
+The failure is silent in the direction that matters: submissions keep
+arriving and landing in `machine_submissions` correctly, nothing is lost, but
+nobody opens an issue about them, so the queue just grows unseen. GitHub
+emails the repo owner when it disables a workflow, so that mail is the signal
+— it is easy to mistake for routine GitHub noise.
+
+Re-enabling takes one tap: **Actions** → **Review queue** → **Enable
+workflow**. Any push to `main` also resets the 60-day clock, so in a period
+of active work this never triggers. It becomes a real risk only after the
+project has been left alone for two months — which is exactly when nobody is
+watching for it.
+
+If the project does go quiet for long stretches, worth knowing: running
+**Review queue** by hand from the Actions tab works whether or not the
+schedule is enabled, so a missed alert is never a lost submission.

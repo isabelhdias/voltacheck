@@ -149,7 +149,10 @@ report look fresh.
 - `.github/workflows/review-queue.yml` — a few times a day, opens or
   updates one labelled GitHub issue listing pending `machine_submissions`,
   and closes it when the queue empties. Silent when there's nothing
-  waiting. This is how Isabel finds out something needs approving.
+  waiting. This is how Isabel finds out something needs approving — and the
+  one piece of the system that can fail silently, since GitHub disables
+  scheduled workflows after 60 days without a commit. See "The one way this
+  alerting can go quiet" in `docs/supabase-setup.md`.
 - `package.json` / `package-lock.json` — test tooling only, never served.
   The app itself still has no build step.
 
