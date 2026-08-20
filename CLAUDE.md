@@ -27,6 +27,12 @@ Roadmap, in priority order:
    `tools/import_osm.py`, not guessed client-side — this app is meant to be
    the base for iOS/Android clients later, and those want to query it
    server-side.
+5. ~~Distance from the user, and filter by status~~ — done. The locate
+   button records a fix (`store.userPos`) that the sheet shows a distance
+   from and the pin cap prefers when trimming the list; the tally row is now
+   four status toggles (`A funcionar` / `Cheias` / `Avariadas` / `Sem
+   dados`), composing with the chain chips by AND. Nothing calls
+   geolocation except that one existing button tap.
 
 The app is live and shared — the Supabase project exists, so local mode is
 now the fallback path, not the default.
@@ -75,16 +81,22 @@ report look fresh.
   tunables (`STALE_AFTER`, `RECONFIRM_AFTER`, `LOOKBACK_H`, colours, labels).
   Isabel pastes her Supabase values in here, not in `index.html`.
 - `app/domain.js` — pure status/search logic (decay, reconfirm threshold,
-  town search, chain filtering). No `document`/`window`/`localStorage`/
-  `navigator`/`fetch` — this is the spec an iOS/Android port would mirror,
-  and what `node --test` unit-tests directly.
-- `app/store.js` — the `machines`/`selected`/`activeChain` state and
-  localStorage persistence (`localSeed`, `localLoad`, `localSave`,
-  `deviceId`).
+  town search, chain filtering, distance, status filtering). No
+  `document`/`window`/`localStorage`/`navigator`/`fetch` — this is the spec
+  an iOS/Android port would mirror, and what `node --test` unit-tests
+  directly.
+- `app/store.js` — the `machines`/`selected`/`activeChain`/`activeStatuses`/
+  `userPos` state and localStorage persistence (`localSeed`, `localLoad`,
+  `localSave`, `deviceId`). `activeStatuses` and `userPos` are never
+  persisted — filters are ephemeral, and a fix only exists once locate is
+  tapped.
 - `app/api.js` — Supabase reads and writes (`connect`, `pull`, `pushReport`,
   `pushMachine`, `getFix`), and the PostgREST paging.
-- `app/map.js` — Leaflet init, pins, viewport culling, the tally strip.
-- `app/ui.js` — the bottom sheet, town search, chain filter chips, toast.
+- `app/map.js` — Leaflet init, pins, viewport culling (preferring the
+  machines nearest `store.userPos` when trimming the list).
+- `app/ui.js` — the bottom sheet (including the distance line), town search,
+  chain filter chips, status filter chips (the tally row), the "a filter is
+  active" badge and empty-state reset, toast.
 - `app/main.js` — wires the modules together and boots the app.
 - `seed/machines.js` — the generated `SEED` array (2,444 rows), imported by
   `app/store.js`. Don't edit it by hand: run `python3 tools/import_osm.py`.
