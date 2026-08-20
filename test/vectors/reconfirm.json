@@ -1,0 +1,75 @@
+{
+  "description": "needsReconfirm(report, now) — the sheet prompt switches from 'Estiveste lá agora?' to 'Ainda está assim?' once the latest report is more than reconfirmAfterMs old. Strictly greater-than, same convention as statusOf. needsReconfirm() on its own does NOT know about staleness — it will happily return true for a report that is hours past staleAfterMs too. The actual UI prompt is a composition of needsReconfirm() with statusOf(), given by promptFormula below; a report already gone stale must fall back to the first-visit prompt, not the reconfirm one.",
+  "constants": {
+    "reconfirmAfterMs": 10800000,
+    "staleAfterMs": 64800000,
+    "promptEstivesteLaAgora": "Estiveste lá agora?",
+    "promptAindaEstaAssim": "Ainda está assim?"
+  },
+  "promptFormula": "prompt = (report != null && statusOf(machine, now) != 'stale' && needsReconfirm(report, now)) ? promptAindaEstaAssim : promptEstivesteLaAgora",
+  "cases": [
+    {
+      "id": "just-under-threshold-no-reconfirm",
+      "description": "Report is 1ms under 3h old: not yet asking for reconfirmation.",
+      "now": 1700000000000,
+      "report": { "s": "ok", "at": 1699989200001 },
+      "expectedNeedsReconfirm": false,
+      "expectedStatus": "ok",
+      "expectedPrompt": "Estiveste lá agora?"
+    },
+    {
+      "id": "exactly-at-threshold-no-reconfirm",
+      "description": "Report is exactly 3h old. Threshold side that wins: still the first-visit prompt (needsReconfirm uses '> reconfirmAfterMs', not '>=').",
+      "now": 1700000000000,
+      "report": { "s": "ok", "at": 1699989200000 },
+      "expectedNeedsReconfirm": false,
+      "expectedStatus": "ok",
+      "expectedPrompt": "Estiveste lá agora?"
+    },
+    {
+      "id": "just-over-threshold-reconfirm",
+      "description": "Report is 1ms over 3h old: switches to the reconfirm prompt.",
+      "now": 1700000000000,
+      "report": { "s": "ok", "at": 1699989199999 },
+      "expectedNeedsReconfirm": true,
+      "expectedStatus": "ok",
+      "expectedPrompt": "Ainda está assim?"
+    },
+    {
+      "id": "no-report-no-reconfirm",
+      "description": "A machine with no report at all never shows the reconfirm prompt.",
+      "now": 1700000000000,
+      "report": null,
+      "expectedNeedsReconfirm": false,
+      "expectedStatus": "stale",
+      "expectedPrompt": "Estiveste lá agora?"
+    },
+    {
+      "id": "just-under-stale-still-reconfirms",
+      "description": "Report is exactly 18h old (staleAfterMs), the last instant before it goes stale: statusOf still reports it fresh, so the reconfirm prompt still shows.",
+      "now": 1700000000000,
+      "report": { "s": "ok", "at": 1699935200000 },
+      "expectedNeedsReconfirm": true,
+      "expectedStatus": "ok",
+      "expectedPrompt": "Ainda está assim?"
+    },
+    {
+      "id": "older-than-18h-suppresses-reconfirm",
+      "description": "Report is 1ms over 18h old. needsReconfirm() on its own still returns true (10h+ past a 3h threshold), but the machine is now stale, so the composed prompt must fall back to the first-visit copy rather than asking to reconfirm a status nobody can see anymore.",
+      "now": 1700000000000,
+      "report": { "s": "ok", "at": 1699935199999 },
+      "expectedNeedsReconfirm": true,
+      "expectedStatus": "stale",
+      "expectedPrompt": "Estiveste lá agora?"
+    },
+    {
+      "id": "well-past-stale-suppresses-reconfirm",
+      "description": "Report is 19h old (68400000ms), well past staleAfterMs: same suppression as the boundary case, with more margin.",
+      "now": 1700000000000,
+      "report": { "s": "down", "at": 1699931600000 },
+      "expectedNeedsReconfirm": true,
+      "expectedStatus": "stale",
+      "expectedPrompt": "Estiveste lá agora?"
+    }
+  ]
+}

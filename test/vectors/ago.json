@@ -1,0 +1,100 @@
+{
+  "description": "ago(ts, now) — the pt-PT relative-time string shown under a report. Uses Math.round, floored to a minimum of 1 so nothing ever reads 'há 0 min'. Two boundary cases below ('há 60 min' and 'há 24 h') look like off-by-one bugs but are the real, current output of domain.js — rounding pushes the display over the branch's own cutoff. They are included deliberately so a port that 'fixes' the rounding gets caught by this vector; if domain.js is ever intentionally changed here, update these cases in the same commit.",
+  "constants": {
+    "hourMs": 3600000,
+    "dayMs": 86400000
+  },
+  "cases": [
+    {
+      "id": "zero-diff-floors-to-1-min",
+      "description": "Report filed at the same instant as now: floored to 'há 1 min', never 'há 0 min'.",
+      "now": 1700000000000,
+      "ts": 1700000000000,
+      "expected": "há 1 min"
+    },
+    {
+      "id": "ten-seconds-floors-to-1-min",
+      "description": "10s rounds to 0 min unfloored; the Math.max(1, …) floor kicks in.",
+      "now": 1700000000000,
+      "ts": 1699999990000,
+      "expected": "há 1 min"
+    },
+    {
+      "id": "twenty-nine-seconds-still-floors-to-1-min",
+      "description": "29s / 60s = 0.4833, rounds to 0, floored to 1.",
+      "now": 1700000000000,
+      "ts": 1699999971000,
+      "expected": "há 1 min"
+    },
+    {
+      "id": "ninety-seconds-rounds-to-2-min",
+      "description": "90s / 60s = 1.5, rounds up to 2 — no flooring needed here.",
+      "now": 1700000000000,
+      "ts": 1699999910000,
+      "expected": "há 2 min"
+    },
+    {
+      "id": "one-ms-under-an-hour-rounds-to-60-min",
+      "description": "3599999ms is still under hourMs so it takes the minutes branch; 3599999/60000 = 59.99998, which rounds to 60. Reads 'há 60 min', not 'há 1 h' — the known rounding quirk.",
+      "now": 1700000000000,
+      "ts": 1699996400001,
+      "expected": "há 60 min"
+    },
+    {
+      "id": "exactly-one-hour",
+      "description": "At exactly hourMs the diff no longer qualifies for the minutes branch (d < hourMs is false), so it takes the hours branch: 1 h.",
+      "now": 1700000000000,
+      "ts": 1699996400000,
+      "expected": "há 1 h"
+    },
+    {
+      "id": "just-over-one-hour",
+      "description": "hourMs + 1ms rounds to 1 h.",
+      "now": 1700000000000,
+      "ts": 1699996399999,
+      "expected": "há 1 h"
+    },
+    {
+      "id": "twenty-three-hours",
+      "description": "23h rounds cleanly to 23 h.",
+      "now": 1700000000000,
+      "ts": 1699917200000,
+      "expected": "há 23 h"
+    },
+    {
+      "id": "one-ms-under-a-day-rounds-to-24-h",
+      "description": "86399999ms is still under dayMs so it takes the hours branch; 86399999/3600000 rounds to 24. Reads 'há 24 h', not 'há 1 d' — the same rounding quirk as the 60-min case.",
+      "now": 1700000000000,
+      "ts": 1699913600001,
+      "expected": "há 24 h"
+    },
+    {
+      "id": "exactly-one-day",
+      "description": "At exactly dayMs the diff no longer qualifies for the hours branch, so it takes the days branch: 1 d.",
+      "now": 1700000000000,
+      "ts": 1699913600000,
+      "expected": "há 1 d"
+    },
+    {
+      "id": "just-over-one-day",
+      "description": "dayMs + 1ms rounds to 1 d.",
+      "now": 1700000000000,
+      "ts": 1699913599999,
+      "expected": "há 1 d"
+    },
+    {
+      "id": "five-days",
+      "description": "5 days rounds cleanly to 5 d.",
+      "now": 1700000000000,
+      "ts": 1699568000000,
+      "expected": "há 5 d"
+    },
+    {
+      "id": "four-hundred-days",
+      "description": "There is no upper branch — the days branch is used forever, however old the report.",
+      "now": 1700000000000,
+      "ts": 1665440000000,
+      "expected": "há 400 d"
+    }
+  ]
+}

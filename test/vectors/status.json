@@ -1,0 +1,68 @@
+{
+  "description": "statusOf(machine, now) — a machine's displayed status decays to 'stale' once its latest report is more than staleAfterMs old. The comparison is strictly greater-than, so a report exactly staleAfterMs old is NOT yet stale.",
+  "constants": {
+    "staleAfterMs": 64800000,
+    "hourMs": 3600000
+  },
+  "cases": [
+    {
+      "id": "just-under-threshold-keeps-reported-status",
+      "description": "Report is 1ms under 18h old: still shows its reported status ('down'), not stale.",
+      "now": 1700000000000,
+      "reports": [{ "s": "down", "at": 1699935200001 }],
+      "expectedStatus": "down"
+    },
+    {
+      "id": "exactly-at-threshold-not-yet-stale",
+      "description": "Report is exactly 18h old. The threshold side that wins: still fresh (statusOf uses '> staleAfterMs', not '>='), so it shows the reported status ('full'), not stale.",
+      "now": 1700000000000,
+      "reports": [{ "s": "full", "at": 1699935200000 }],
+      "expectedStatus": "full"
+    },
+    {
+      "id": "just-over-threshold-goes-stale",
+      "description": "Report is 1ms over 18h old: decays to stale.",
+      "now": 1700000000000,
+      "reports": [{ "s": "ok", "at": 1699935199999 }],
+      "expectedStatus": "stale"
+    },
+    {
+      "id": "no-reports-at-all-is-stale",
+      "description": "A machine with an empty reports array has no status to show, so it is stale by default.",
+      "now": 1700000000000,
+      "reports": [],
+      "expectedStatus": "stale"
+    },
+    {
+      "id": "fresh-ok",
+      "description": "A report filed at the current instant shows its own status verbatim: ok.",
+      "now": 1700000000000,
+      "reports": [{ "s": "ok", "at": 1700000000000 }],
+      "expectedStatus": "ok"
+    },
+    {
+      "id": "fresh-full",
+      "description": "A report filed at the current instant shows its own status verbatim: full.",
+      "now": 1700000000000,
+      "reports": [{ "s": "full", "at": 1700000000000 }],
+      "expectedStatus": "full"
+    },
+    {
+      "id": "fresh-down",
+      "description": "A report filed at the current instant shows its own status verbatim: down.",
+      "now": 1700000000000,
+      "reports": [{ "s": "down", "at": 1700000000000 }],
+      "expectedStatus": "down"
+    },
+    {
+      "id": "only-the-latest-report-counts",
+      "description": "statusOf looks only at the last element of reports, regardless of what came before.",
+      "now": 1700000000000,
+      "reports": [
+        { "s": "down", "at": 1699000000000 },
+        { "s": "ok", "at": 1700000000000 }
+      ],
+      "expectedStatus": "ok"
+    }
+  ]
+}

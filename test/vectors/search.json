@@ -1,0 +1,171 @@
+{
+  "description": "norm() accent-folds and lowercases for matching; townsMatching() groups machines by town and ranks matches. A machine here is the minimal shape townsMatching needs: { town, lat, lng }.",
+  "normCases": [
+    {
+      "id": "strip-cedilla-and-tilde",
+      "input": "Bragança",
+      "expected": "braganca"
+    },
+    {
+      "id": "already-bare",
+      "input": "braganca",
+      "expected": "braganca"
+    },
+    {
+      "id": "uppercase-and-accented",
+      "input": "BRAGANÇA",
+      "expected": "braganca"
+    },
+    {
+      "id": "multi-word-accents",
+      "input": "São João",
+      "expected": "sao joao"
+    },
+    {
+      "id": "multi-word-bare",
+      "input": "sao joao",
+      "expected": "sao joao"
+    },
+    {
+      "id": "accented-acute",
+      "input": "Évora",
+      "expected": "evora"
+    },
+    {
+      "id": "bare-acute",
+      "input": "evora",
+      "expected": "evora"
+    },
+    {
+      "id": "trims-surrounding-whitespace",
+      "input": "  Porto  ",
+      "expected": "porto"
+    },
+    {
+      "id": "empty-string",
+      "input": "",
+      "expected": ""
+    },
+    {
+      "id": "null-like-input-is-empty-string",
+      "input": null,
+      "expected": ""
+    }
+  ],
+  "townsMatchingCases": [
+    {
+      "id": "prefix-beats-mid-string-porto",
+      "description": "The real motivating case: searching 'porto' must rank the town literally named Porto first, ahead of towns that merely contain the word.",
+      "machines": [
+        { "town": "Porto", "lat": 41.15, "lng": -8.61 },
+        { "town": "Porto de Mós", "lat": 39.6, "lng": -8.81 },
+        { "town": "Vila do Porto", "lat": 36.94, "lng": -25.15 },
+        { "town": "Matosinhos", "lat": 41.18, "lng": -8.68 }
+      ],
+      "term": "porto",
+      "expectedTowns": ["Porto", "Porto de Mós", "Vila do Porto"]
+    },
+    {
+      "id": "search-term-case-is-folded-too",
+      "description": "norm() is applied to the search term as well as the town names, so an all-caps search still matches.",
+      "machines": [
+        { "town": "Porto", "lat": 41.15, "lng": -8.61 },
+        { "town": "Porto de Mós", "lat": 39.6, "lng": -8.81 }
+      ],
+      "term": "PORTO",
+      "expectedTowns": ["Porto", "Porto de Mós"]
+    },
+    {
+      "id": "accent-folded-braganca",
+      "description": "Typing the unaccented form finds the accented town name.",
+      "machines": [
+        { "town": "Bragança", "lat": 41.8, "lng": -6.76 },
+        { "town": "São João da Madeira", "lat": 40.9, "lng": -8.5 },
+        { "town": "Évora", "lat": 38.57, "lng": -7.9 }
+      ],
+      "term": "braganca",
+      "expectedTowns": ["Bragança"]
+    },
+    {
+      "id": "accent-folded-sao-joao",
+      "description": "Same, for a two-word accented town.",
+      "machines": [
+        { "town": "Bragança", "lat": 41.8, "lng": -6.76 },
+        { "town": "São João da Madeira", "lat": 40.9, "lng": -8.5 },
+        { "town": "Évora", "lat": 38.57, "lng": -7.9 }
+      ],
+      "term": "sao joao",
+      "expectedTowns": ["São João da Madeira"]
+    },
+    {
+      "id": "accented-input-matches-too",
+      "description": "Typing the accent (Évora) still finds the town, exercising the other direction of the fold.",
+      "machines": [
+        { "town": "Bragança", "lat": 41.8, "lng": -6.76 },
+        { "town": "São João da Madeira", "lat": 40.9, "lng": -8.5 },
+        { "town": "Évora", "lat": 38.57, "lng": -7.9 }
+      ],
+      "term": "Évora",
+      "expectedTowns": ["Évora"]
+    },
+    {
+      "id": "bare-input-matches-accented-town",
+      "description": "And typing it without the accent still finds Évora.",
+      "machines": [
+        { "town": "Bragança", "lat": 41.8, "lng": -6.76 },
+        { "town": "São João da Madeira", "lat": 40.9, "lng": -8.5 },
+        { "town": "Évora", "lat": 38.57, "lng": -7.9 }
+      ],
+      "term": "evora",
+      "expectedTowns": ["Évora"]
+    },
+    {
+      "id": "caps-at-eight-results",
+      "description": "10 towns all start with 'Vila '; only the first 8, alphabetically (all tie on match position 0), come back.",
+      "machines": [
+        { "town": "Vila A", "lat": 40, "lng": -8 },
+        { "town": "Vila B", "lat": 40, "lng": -8 },
+        { "town": "Vila C", "lat": 40, "lng": -8 },
+        { "town": "Vila D", "lat": 40, "lng": -8 },
+        { "town": "Vila E", "lat": 40, "lng": -8 },
+        { "town": "Vila F", "lat": 40, "lng": -8 },
+        { "town": "Vila G", "lat": 40, "lng": -8 },
+        { "town": "Vila H", "lat": 40, "lng": -8 },
+        { "town": "Vila I", "lat": 40, "lng": -8 },
+        { "town": "Vila J", "lat": 40, "lng": -8 }
+      ],
+      "term": "vila",
+      "expectedTowns": ["Vila A", "Vila B", "Vila C", "Vila D", "Vila E", "Vila F", "Vila G", "Vila H"]
+    },
+    {
+      "id": "empty-term-returns-nothing",
+      "description": "An empty search box shows no town results, even though every town would technically match an empty substring.",
+      "machines": [
+        { "town": "Porto", "lat": 41.15, "lng": -8.61 },
+        { "town": "Lisboa", "lat": 38.72, "lng": -9.14 }
+      ],
+      "term": "",
+      "expectedTowns": []
+    },
+    {
+      "id": "whitespace-only-term-returns-nothing",
+      "description": "norm() trims, so a whitespace-only term also counts as empty.",
+      "machines": [
+        { "town": "Porto", "lat": 41.15, "lng": -8.61 },
+        { "town": "Lisboa", "lat": 38.72, "lng": -9.14 }
+      ],
+      "term": "   ",
+      "expectedTowns": []
+    },
+    {
+      "id": "no-match-returns-nothing",
+      "description": "A term that appears in no town name returns an empty list, not an error.",
+      "machines": [
+        { "town": "Porto", "lat": 41.15, "lng": -8.61 },
+        { "town": "Lisboa", "lat": 38.72, "lng": -9.14 }
+      ],
+      "term": "xyzzy",
+      "expectedTowns": []
+    }
+  ]
+}

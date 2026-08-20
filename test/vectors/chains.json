@@ -1,0 +1,95 @@
+{
+  "description": "chainCounts() orders chains by how many machines each has, descending, except 'Outras' which always sorts last regardless of its count. 'Todas' is not in this data at all — it is a UI-only entry the caller prepends ahead of this list, so it never appears here. filterByChain() with a falsy chain (null or empty string) returns every machine unfiltered; a real chain name filters to only that chain's machines.",
+  "chainCountsCases": [
+    {
+      "id": "descending-by-count",
+      "description": "Plain descending order, no Outras present.",
+      "machines": [
+        { "chain": "Continente" }, { "chain": "Continente" }, { "chain": "Continente" }, { "chain": "Continente" }, { "chain": "Continente" },
+        { "chain": "Pingo Doce" }, { "chain": "Pingo Doce" }, { "chain": "Pingo Doce" },
+        { "chain": "Lidl" }
+      ],
+      "expected": [
+        { "chain": "Continente", "count": 5 },
+        { "chain": "Pingo Doce", "count": 3 },
+        { "chain": "Lidl", "count": 1 }
+      ]
+    },
+    {
+      "id": "outras-always-last-even-with-the-highest-count",
+      "description": "Outras has more machines than any named chain but still sorts to the end.",
+      "machines": [
+        { "chain": "Outras" }, { "chain": "Outras" }, { "chain": "Outras" }, { "chain": "Outras" }, { "chain": "Outras" },
+        { "chain": "Outras" }, { "chain": "Outras" }, { "chain": "Outras" }, { "chain": "Outras" }, { "chain": "Outras" },
+        { "chain": "Continente" }, { "chain": "Continente" }, { "chain": "Continente" }, { "chain": "Continente" }, { "chain": "Continente" },
+        { "chain": "Lidl" }
+      ],
+      "expected": [
+        { "chain": "Continente", "count": 5 },
+        { "chain": "Lidl", "count": 1 },
+        { "chain": "Outras", "count": 10 }
+      ]
+    },
+    {
+      "id": "ties-keep-first-seen-order",
+      "description": "When counts tie, the sort is stable, so the order among tied chains follows the order in which each chain first appears in the machines list — here Lidl, Continente, Pingo Doce, all at count 2.",
+      "machines": [
+        { "chain": "Lidl" }, { "chain": "Lidl" },
+        { "chain": "Continente" }, { "chain": "Continente" },
+        { "chain": "Pingo Doce" }, { "chain": "Pingo Doce" }
+      ],
+      "expected": [
+        { "chain": "Lidl", "count": 2 },
+        { "chain": "Continente", "count": 2 },
+        { "chain": "Pingo Doce", "count": 2 }
+      ]
+    },
+    {
+      "id": "empty-machines-list",
+      "description": "No machines, no chains.",
+      "machines": [],
+      "expected": []
+    }
+  ],
+  "filterByChainCases": [
+    {
+      "id": "null-chain-returns-everything",
+      "machines": [
+        { "id": 1, "chain": "Lidl" },
+        { "id": 2, "chain": "Continente" },
+        { "id": 3, "chain": "Lidl" }
+      ],
+      "chain": null,
+      "expectedIds": [1, 2, 3]
+    },
+    {
+      "id": "empty-string-chain-returns-everything",
+      "machines": [
+        { "id": 1, "chain": "Lidl" },
+        { "id": 2, "chain": "Continente" },
+        { "id": 3, "chain": "Lidl" }
+      ],
+      "chain": "",
+      "expectedIds": [1, 2, 3]
+    },
+    {
+      "id": "named-chain-filters-to-that-chain-only",
+      "machines": [
+        { "id": 1, "chain": "Lidl" },
+        { "id": 2, "chain": "Continente" },
+        { "id": 3, "chain": "Lidl" }
+      ],
+      "chain": "Lidl",
+      "expectedIds": [1, 3]
+    },
+    {
+      "id": "chain-with-no-machines-returns-empty",
+      "machines": [
+        { "id": 1, "chain": "Lidl" },
+        { "id": 2, "chain": "Continente" }
+      ],
+      "chain": "Aldi",
+      "expectedIds": []
+    }
+  ]
+}
