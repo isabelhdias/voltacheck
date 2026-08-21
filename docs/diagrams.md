@@ -5,6 +5,11 @@ one for the *why*; this one is for getting the shape of it in your head
 quickly. Every diagram is Mermaid, so it renders inline on GitHub — including
 the mobile app, which is where this repo is mostly read.
 
+> **Keeping these true is part of changing the code, not a follow-up.**
+> "Keeping the docs true" in `CLAUDE.md` says which diagram each kind of
+> change has to update, and it refers to them by the numbers below — so add
+> new diagrams at the end rather than renumbering the existing ones.
+
 ## 1. The whole thing, once
 
 ```mermaid

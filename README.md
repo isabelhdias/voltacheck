@@ -115,6 +115,9 @@ published at `/preview/pr-N/` with the database keys blanked.
 | `test/` | vectors, unit, integration, e2e |
 | `docs/` | [architecture](docs/architecture.md) · [diagrams](docs/diagrams.md) · [domain contract](docs/domain-contract.md) · [rate limiting](docs/rate-limiting-plan.md) · [seed data](docs/seed-data-plan.md) · [Supabase setup](docs/supabase-setup.md) · [redesign](docs/redesign.md) |
 
+Changing any of it? `CLAUDE.md` lists which of these docs — and which
+diagram — each kind of change has to update, in the same commit.
+
 ## Data
 
 Machine locations come from **[OpenStreetMap](https://www.openstreetmap.org/copyright)**

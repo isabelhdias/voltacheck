@@ -209,6 +209,38 @@ report look fresh.
 - `package.json` / `package-lock.json` — test tooling only, never served.
   The app itself still has no build step.
 
+## Keeping the docs true
+
+`README.md`, `docs/architecture.md` and `docs/diagrams.md` describe the code
+rather than plan it, so a change to the code can quietly make them wrong. A
+wrong diagram is worse than no diagram — someone acts on it. **Update the
+docs in the same commit as the change that outdates them**, never as a
+follow-up nobody gets to.
+
+| If you change | Also update |
+|---|---|
+| what a module in `app/` does, or add/remove one | the module table in `docs/architecture.md`, diagram 2 in `docs/diagrams.md`, the `app/` row in the README's "Where things are", and the Files list above |
+| `STALE_AFTER` / `RECONFIRM_AFTER`, or anything about the decay | the decay clock (diagram 4), the README's decay table, "Key mechanic" above, `docs/domain-contract.md`, and the vectors |
+| `domain.js`'s exported surface | `docs/domain-contract.md`, `docs/architecture.md`, `test/vectors/*.json` |
+| the boot path, or how live vs. local mode is decided | diagram 3, and "How it's built" in the README |
+| the guards in `report_machine()` or `submit_machine()` — limits, radius, return strings | diagram 5 or 6, `docs/rate-limiting-plan.md`, and "How it's built" in the README |
+| the moderation flow or the review-queue workflows | diagram 6 and `docs/supabase-setup.md` |
+| what CI, Pages or Migrate do | diagram 7, the test table in `docs/architecture.md`, and "Tests" in the README |
+| anything visible in the app's topbar, sheet, filters, search or add form | re-run `node tools/screenshots.mjs` and commit what it writes to `docs/images/` |
+| a top-level file or directory | the Files list above and the README's "Where things are" |
+
+Three rules that go with that:
+
+- **Never hand-edit `docs/images/`.** Those are generated. Re-run the script
+  so the screenshots stay the real app rather than a picture of an older one.
+- **Diagrams must parse.** Mermaid renders on GitHub, so a syntax error is a
+  broken grey block on Isabel's phone, not a build failure anyone catches.
+  Check every block you touched before pushing — paste it into
+  <https://mermaid.live>, or parse it headlessly with the mermaid UMD build.
+- **Deleting a diagram beats shipping a wrong one.** If a change makes one
+  untrue and redrawing it properly is out of scope for that commit, remove
+  it and say so, rather than leaving a picture that lies.
+
 ## Working style
 
 **This project is worked fully through agents. Isabel does not edit code and
@@ -226,6 +258,8 @@ run anything locally.
   migration ran without its data reload and shipped an empty column).
 - On external data sources: flag terms-of-use problems rather than working
   around them.
+- A change that outdates a doc or a diagram isn't done until that doc is
+  updated in the same commit — see "Keeping the docs true" above.
 
 ## Secrets
 
