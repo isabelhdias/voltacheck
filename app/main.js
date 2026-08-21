@@ -137,8 +137,7 @@ saveBtn.addEventListener("click", async function(){
                            src: "user", reports: [] });
     store.localSave();
     document.body.classList.remove("adding");
-    ui.buildChainChips();
-    ui.buildTally();
+    ui.refreshFilters();
     draw();
     ui.toast("Máquina adicionada");
   } else if(r === "ok"){
@@ -206,8 +205,7 @@ document.addEventListener("visibilitychange", async function(){
   if(document.visibilityState === "visible" && store.live){
     try {
       await api.pull();
-      ui.buildChainChips();
-      ui.buildTally();
+      ui.refreshFilters();
       draw();
       if(store.selected) ui.select(store.selected);
     } catch(e){}
@@ -215,7 +213,6 @@ document.addEventListener("visibilitychange", async function(){
 });
 
 connect().then(function(){
-  ui.buildChainChips();
-  ui.buildTally();
+  ui.refreshFilters();
   draw();
 });

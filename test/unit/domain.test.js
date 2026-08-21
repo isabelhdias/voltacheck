@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   statusOf,
+  filterByDistance,
   suggestTown,
   knownTowns,
   needsReconfirm,
@@ -244,5 +245,17 @@ test('knownTowns — each concelho once, ordered the way the search box normalis
 
   for (const c of knownTownsCases) {
     assert.deepEqual(knownTowns(c.machines), c.expected, `${c.id}: ${c.description ?? ''}`);
+  }
+});
+
+/* ───────── distance-filter.json: filterByDistance ───────── */
+
+test('filterByDistance — inside the radius; everything when there is no radius or no position', () => {
+  const { filterByDistanceCases } = loadVector('distance-filter.json');
+  assert.ok(filterByDistanceCases.length > 0, 'vector file has no cases');
+
+  for (const c of filterByDistanceCases) {
+    const got = filterByDistance(c.machines, c.from, c.metres).map((m) => m.id);
+    assert.deepEqual(got, c.expectedIds, `${c.id}: ${c.description ?? ''}`);
   }
 });

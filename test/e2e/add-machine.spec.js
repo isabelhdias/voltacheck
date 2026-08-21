@@ -20,12 +20,29 @@ function chip(page, label) {
   return page.locator('#chains button', { hasText: label }).first();
 }
 
+// The chain chips live inside the filter sheet, and the long tail sits
+// behind "+ N cadeias" — so open both before reading a chip's count.
+async function chainCount(page, label) {
+  await page.click('#filterbtn');
+  await expect(page.locator('#filters')).toBeVisible();
+  const more = page.locator('#chains .more');
+  if (await more.count()) await more.click();
+  const n = Number(await chip(page, label).locator('em').textContent());
+  // Escape rather than clicking the scrim: expanding the chain list makes
+  // the sheet tall enough to cover the scrim's centre, so Playwright's
+  // click lands on the sheet instead.
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#filters')).toBeHidden();
+  return n;
+}
+
 test.describe('add machine form — local mode', () => {
   test('collects name, chain and an optional note, and the chain sticks', async ({ page }) => {
     await gotoApp(page);
     await expectLocalMode(page);
 
-    const beforeLidl = await page.locator('.pin').count(); // sanity only, re-checked below
+    const beforeLidl = await chainCount(page, 'Lidl');
+    expect(beforeLidl).toBeGreaterThan(0);
 
     await page.click('#add');
     await expect(page.locator('.addbar')).toBeVisible();
@@ -57,18 +74,10 @@ test.describe('add machine form — local mode', () => {
 
     // The chain picked in the form is the chain the machine actually got —
     // the Lidl chip's count goes up by exactly one.
-    await page.mouse.move(417, 556);
-    for (let i = 0; i < 7; i++) {
-      await page.mouse.wheel(0, 400);
-      await page.waitForTimeout(150);
-    }
-    await page.waitForTimeout(400);
-
-    await chip(page, 'Lidl').click();
-    await page.waitForTimeout(500);
-    const afterLidl = await page.locator('.pin').count();
-    expect(afterLidl).toBe(279); // 278 seeded + the one just added
-    expect(beforeLidl).toBeGreaterThan(0); // the earlier read wasn't meaningless
+    // Read from the chain chip's own count rather than by counting pins:
+    // pins are capped at MAX_PINS, so a chain near the cap would hide the
+    // +1 this test exists to prove.
+    expect(await chainCount(page, 'Lidl')).toBe(beforeLidl + 1);
   });
 
   test('cancelling the form adds nothing', async ({ page }) => {

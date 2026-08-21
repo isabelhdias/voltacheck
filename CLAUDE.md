@@ -29,10 +29,8 @@ Roadmap, in priority order:
    server-side.
 5. ~~Distance from the user, and filter by status~~ — done. The locate
    button records a fix (`store.userPos`) that the sheet shows a distance
-   from and the pin cap prefers when trimming the list; the tally row is now
-   four status toggles (`A funcionar` / `Cheias` / `Avariadas` / `Sem
-   dados`), composing with the chain chips by AND. Nothing calls
-   geolocation except that one existing button tap.
+   from and the pin cap prefers when trimming the list; status and chain
+   filters compose by AND.
 6. ~~Moderated machine submissions~~ — done. Anonymous insert into
    `machines` is revoked outright; the "adicionar" form now calls
    `public.submit_machine()`, which writes to `machine_submissions` — a
@@ -70,12 +68,18 @@ now the fallback path, not the default.
   the script holds `SUPABASE_URL` / `SUPABASE_ANON_KEY`. Filled, the app runs
   shared and shows an "em direto" badge; empty, it falls back to localStorage
   with seed data. Never break the empty case.
+- **Two taps may ask for location, and only those two:** the locate button,
+  and picking a distance in the filter sheet. Never on load, never on
+  opening a sheet. "Todas" does not ask, because it needs no position. See
+  `docs/redesign.md`.
 - **UI copy is Portuguese** (pt-PT). Match the existing register — plain and
   direct, not formal.
-- **Don't restyle.** Design tokens are CSS vars at the top of the file:
-  `--ink #16233D`, `--paper #F2F4F1`, `--azulejo #2F6FB2`, and status colours
-  `--ok #1F9E63`, `--full #D9932B`, `--down #D64545`, `--stale #8C93A5`.
-  Type is Archivo. Match what's there.
+- **Don't restyle.** Design tokens are CSS vars at the top of `index.html`:
+  `--ink #14202E`, `--paper #F4F2EC`, `--azulejo #1F4FD8`, and status colours
+  `--ok #12A05F`, `--full #E39B22`, `--down #DE4A3F`, `--stale #98A0AE`.
+  Type is Archivo, loaded as a variable font because the wordmark needs the
+  `wdth` axis. These come from `design/VoltaCheck.dc.html`; match what's
+  there.
 
 ## Key mechanic
 
@@ -111,8 +115,9 @@ report look fresh.
 - `app/map.js` — Leaflet init, pins, viewport culling (preferring the
   machines nearest `store.userPos` when trimming the list).
 - `app/ui.js` — the bottom sheet (including the distance line), town search,
-  chain filter chips, status filter chips (the tally row), the "a filter is
-  active" badge and empty-state reset, toast.
+  the filter sheet (status checklist, chain chips, distance segmented
+  control), the topbar filter bar and its per-filter chips, the count line,
+  empty-state reset, toast.
 - `app/main.js` — wires the modules together and boots the app.
 - `seed/machines.js` — the generated `SEED` array (2,444 rows), imported by
   `app/store.js`. Don't edit it by hand: run `python3 tools/import_osm.py`.
@@ -132,6 +137,12 @@ report look fresh.
   does and doesn't stop.
 - `docs/supabase-setup.md` — the step-by-step for creating the project and
   going from local mode to shared. Written for an iPad; no CLI.
+- `design/VoltaCheck.dc.html` — the redesign handoff from Claude Design,
+  committed because the share link needs a login agents here cannot hold.
+  A prototype: read it for values, not structure.
+- `docs/redesign.md` — what shipped from that file, where the build
+  deliberately differs, and why distance filtering widened the geolocation
+  rule.
 - `docs/domain-contract.md` — what `app/domain.js` guarantees and how an
   iOS/Android port should consume `test/vectors/*.json`.
 - `docs/architecture.md` — the module layout, why `domain.js` takes `now` as

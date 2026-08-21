@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#F4F2EC;font-family:'Archivo',system-ui,sans-serif;text-wrap:pretty}
+  a{color:#1F4FD8;text-decoration:none}
+  a:hover{color:#14202E}
+</style>
+</helmet>
+
+<div style="display:flex;flex-direction:column;gap:56px;padding:56px 56px 80px;background:#F4F2EC;color:#14202E;width:1700px">
+
+  <section style="display:flex;flex-direction:column;gap:0;border-radius:32px;overflow:hidden;background:#14202E;color:#F4F2EC">
+    <div style="display:flex;align-items:center;gap:56px;padding:64px 64px 56px">
+      <div style="flex:none;width:168px;height:168px;display:grid;place-items:center;background:#F4F2EC;border-radius:44px">
+        <svg viewBox="0 0 100 100" width="120" height="120" aria-label="VoltaCheck">
+          <path d="M74.04 25.96 A34 34 0 1 1 35.63 19.19" fill="none" stroke="#14202E" stroke-width="10" stroke-linecap="round"></path>
+          <polygon points="47.4,13.7 39.4,27.4 31.8,11.0" fill="#14202E"></polygon>
+          <polyline points="35,51 45,61 65,40" fill="none" stroke="#12A05F" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"></polyline>
+        </svg>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <h1 style="margin:0;font-size:88px;line-height:.92;font-weight:800;letter-spacing:-.045em;font-variation-settings:'wdth' 112">VoltaCheck</h1>
+        <p style="margin:0;font-size:24px;line-height:1.35;font-weight:500;max-width:640px;color:#AEB8C7">O estado das máquinas Volta, em tempo real — reportado por quem lá está.</p>
+        <div style="display:flex;gap:10px;margin-top:6px">
+          <span style="font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;padding:7px 13px;border-radius:99px;background:rgba(18,160,95,.16);color:#4BD495">2 444 máquinas</span>
+          <span style="font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;padding:7px 13px;border-radius:99px;border:1px solid rgba(244,242,236,.22);color:#AEB8C7">Cinza depois de 18 h</span>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:0;border-top:1px solid rgba(244,242,236,.14)">
+      <div style="flex:1;padding:26px 32px;border-right:1px solid rgba(244,242,236,.14);display:flex;align-items:center;gap:14px">
+        <svg viewBox="0 0 100 100" width="34" height="34">
+          <path d="M74.04 25.96 A34 34 0 1 1 35.63 19.19" fill="none" stroke="#F4F2EC" stroke-width="11" stroke-linecap="round"></path>
+          <polygon points="47.4,13.7 39.4,27.4 31.8,11.0" fill="#F4F2EC"></polygon>
+          <polyline points="35,51 45,61 65,40" fill="none" stroke="#4BD495" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"></polyline>
+        </svg>
+        <span style="font-size:14px;font-weight:600;color:#AEB8C7">Marca em negativo</span>
+      </div>
+      <div style="flex:1;padding:26px 32px;border-right:1px solid rgba(244,242,236,.14);display:flex;align-items:center;gap:14px">
+        <div style="display:grid;place-items:center;width:38px;height:38px;border-radius:11px;background:#12A05F">
+          <svg viewBox="0 0 100 100" width="26" height="26">
+            <path d="M74.04 25.96 A34 34 0 1 1 35.63 19.19" fill="none" stroke="#0B1B14" stroke-width="12" stroke-linecap="round"></path>
+            <polygon points="47.4,13.7 39.4,27.4 31.8,11.0" fill="#0B1B14"></polygon>
+            <polyline points="35,51 45,61 65,40" fill="none" stroke="#0B1B14" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"></polyline>
+          </svg>
+        </div>
+        <span style="font-size:14px;font-weight:600;color:#AEB8C7">Ícone da app</span>
+      </div>
+      <div style="flex:1;padding:26px 32px;display:flex;align-items:center;gap:14px">
+        <span style="font-size:22px;font-weight:800;letter-spacing:-.04em;font-variation-settings:'wdth' 112">VoltaCheck</span>
+        <span style="font-size:14px;font-weight:600;color:#AEB8C7">Logótipo horizontal</span>
+      </div>
+    </div>
+  </section>
+
+  <section style="display:flex;gap:40px;align-items:flex-start">
+
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;align-items:baseline;gap:10px">
+        <span style="font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#14202E">Mapa</span>
+        <span style="font-size:13px;font-weight:500;color:#6B7688">estado à vista, sem tocar em nada</span>
+      </div>
+      <div style="position:relative;width:352px;height:722px;border-radius:46px;background:#14202E;padding:11px;box-shadow:0 24px 60px rgba(20,32,46,.22)">
+        <div style="position:relative;width:100%;height:100%;border-radius:36px;overflow:hidden;background:#E8E6DE">
+          <div style="position:absolute;inset:0;background:#E8E6DE"></div>
+          <div style="position:absolute;left:-40px;top:120px;width:520px;height:22px;background:#F4F2EC;transform:rotate(-14deg)"></div>
+          <div style="position:absolute;left:-60px;top:340px;width:520px;height:30px;background:#F4F2EC;transform:rotate(8deg)"></div>
+          <div style="position:absolute;left:-40px;top:560px;width:520px;height:18px;background:#F4F2EC;transform:rotate(-6deg)"></div>
+          <div style="position:absolute;left:80px;top:-40px;width:20px;height:900px;background:#F4F2EC;transform:rotate(11deg)"></div>
+          <div style="position:absolute;left:238px;top:-40px;width:26px;height:900px;background:#F4F2EC;transform:rotate(-9deg)"></div>
+          <div style="position:absolute;left:-30px;top:430px;width:180px;height:150px;border-radius:60px;background:#DCE4D8;transform:rotate(-12deg)"></div>
+          <div style="position:absolute;left:250px;top:180px;width:160px;height:120px;border-radius:70px;background:#D9E3EA;transform:rotate(14deg)"></div>
+
+          <div style="position:absolute;left:88px;top:300px;display:grid;place-items:center;width:30px;height:30px;border-radius:99px;background:#12A05F;border:3px solid #fff;box-shadow:0 3px 8px rgba(20,32,46,.3)"></div>
+          <div style="position:absolute;left:196px;top:262px;display:grid;place-items:center;width:30px;height:30px;border-radius:99px;background:#E39B22;border:3px solid #fff;box-shadow:0 3px 8px rgba(20,32,46,.3)"></div>
+          <div style="position:absolute;left:132px;top:452px;display:grid;place-items:center;width:30px;height:30px;border-radius:99px;background:#DE4A3F;border:3px solid #fff;box-shadow:0 3px 8px rgba(20,32,46,.3)"></div>
+          <div style="position:absolute;left:236px;top:520px;display:grid;place-items:center;width:30px;height:30px;border-radius:99px;background:#98A0AE;border:3px solid #fff;box-shadow:0 3px 8px rgba(20,32,46,.3)"></div>
+          <div style="position:absolute;left:58px;top:596px;display:grid;place-items:center;width:30px;height:30px;border-radius:99px;background:#12A05F;border:3px solid #fff;box-shadow:0 3px 8px rgba(20,32,46,.3)"></div>
+          <sc-if value="{{ densePins }}" hint-placeholder-val="{{ true }}">
+            <div style="position:absolute;left:268px;top:392px;width:30px;height:30px;border-radius:99px;background:#12A05F;border:3px solid #fff;box-shadow:0 3px 8px rgba(20,32,46,.3)"></div>
+            <div style="position:absolute;left:158px;top:212px;width:30px;height:30px;border-radius:99px;background:#98A0AE;border:3px solid #fff;box-shadow:0 3px 8px rgba(20,32,46,.3)"></div>
+          </sc-if>
+
+          <div style="position:absolute;left:0;right:0;top:0;padding:10px 14px 22px;background:linear-gradient(180deg,#F4F2EC 66%,rgba(244,242,236,0));display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:700;color:#14202E;padding:0 4px">
+              <span>9:41</span>
+              <span style="letter-spacing:.06em">▮▮▮ ▰</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <svg viewBox="0 0 100 100" width="24" height="24">
+                <path d="M74.04 25.96 A34 34 0 1 1 35.63 19.19" fill="none" stroke="#14202E" stroke-width="12" stroke-linecap="round"></path>
+                <polygon points="47.4,13.7 39.4,27.4 31.8,11.0" fill="#14202E"></polygon>
+                <polyline points="35,51 45,61 65,40" fill="none" stroke="#12A05F" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"></polyline>
+              </svg>
+              <span style="font-size:19px;font-weight:800;letter-spacing:-.035em;font-variation-settings:'wdth' 110">VoltaCheck</span>
+              <span style="font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:99px;background:#fff;border:1px solid rgba(18,160,95,.4);color:#12A05F">Em direto</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:99px;background:#fff;border:1px solid #DCDAD2">
+              <span style="font-size:14px;color:#8A93A3">⌕</span>
+              <span style="font-size:14px;font-weight:500;color:#8A93A3">Procurar por concelho</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:7px">
+              <span style="flex:none;display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;padding:9px 14px;border-radius:99px;background:#14202E;color:#F4F2EC">
+                <i style="display:inline-flex;flex-direction:column;gap:2.5px;font-style:normal">
+                  <b style="display:block;width:13px;height:2px;border-radius:2px;background:#F4F2EC"></b>
+                  <b style="display:block;width:9px;height:2px;border-radius:2px;background:#F4F2EC"></b>
+                  <b style="display:block;width:5px;height:2px;border-radius:2px;background:#F4F2EC"></b>
+                </i>
+                Filtros
+                <em style="font-style:normal;display:grid;place-items:center;min-width:17px;height:17px;padding:0 4px;border-radius:99px;background:#4BD495;color:#0B1B14;font-size:10.5px;font-weight:800">2</em>
+              </span>
+              <span style="flex:none;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:8px 12px;border-radius:99px;background:#fff;border:1px solid #DCDAD2"><i style="width:8px;height:8px;border-radius:99px;background:#12A05F;font-style:normal"></i>A funcionar<span style="color:#8A93A3;font-weight:800">×</span></span>
+              <span style="flex:none;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:8px 12px;border-radius:99px;background:#fff;border:1px solid #DCDAD2">Pingo Doce<span style="color:#8A93A3;font-weight:800">×</span></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;padding:0 4px">
+              <span style="font-size:11.5px;font-weight:700;color:#6B7688">412 máquinas neste mapa</span>
+              <span style="font-size:11.5px;font-weight:700;color:#1F4FD8">Limpar filtros</span>
+            </div>
+          </div>
+
+          <div style="position:absolute;right:14px;bottom:26px;display:flex;flex-direction:column;gap:9px">
+            <div style="display:grid;place-items:center;width:48px;height:48px;border-radius:16px;background:#fff;border:1px solid #DCDAD2;font-size:19px;box-shadow:0 3px 10px rgba(20,32,46,.14)">◎</div>
+            <div style="display:grid;place-items:center;width:48px;height:48px;border-radius:16px;background:#14202E;color:#F4F2EC;font-size:24px;font-weight:500;box-shadow:0 6px 16px rgba(20,32,46,.28)">+</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;align-items:baseline;gap:10px">
+        <span style="font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#14202E">Reportar</span>
+        <span style="font-size:13px;font-weight:500;color:#6B7688">três botões, dois segundos</span>
+      </div>
+      <div style="position:relative;width:352px;height:722px;border-radius:46px;background:#14202E;padding:11px;box-shadow:0 24px 60px rgba(20,32,46,.22)">
+        <div style="position:relative;width:100%;height:100%;border-radius:36px;overflow:hidden;background:#E8E6DE">
+          <div style="position:absolute;left:-60px;top:200px;width:520px;height:26px;background:#F4F2EC;transform:rotate(-10deg)"></div>
+          <div style="position:absolute;left:120px;top:-40px;width:22px;height:900px;background:#F4F2EC;transform:rotate(7deg)"></div>
+          <div style="position:absolute;left:246px;top:120px;width:150px;height:120px;border-radius:70px;background:#D9E3EA;transform:rotate(14deg)"></div>
+          <div style="position:absolute;left:150px;top:214px;width:38px;height:38px;border-radius:99px;background:#12A05F;border:4px solid #fff;box-shadow:0 6px 14px rgba(20,32,46,.34)"></div>
+          <div style="position:absolute;left:74px;top:132px;width:30px;height:30px;border-radius:99px;background:#98A0AE;border:3px solid #fff;box-shadow:0 3px 8px rgba(20,32,46,.3)"></div>
+          <div style="position:absolute;left:258px;top:262px;width:30px;height:30px;border-radius:99px;background:#E39B22;border:3px solid #fff;box-shadow:0 3px 8px rgba(20,32,46,.3)"></div>
+
+          <div style="position:absolute;left:0;right:0;top:0;padding:10px 14px 18px;background:linear-gradient(180deg,#F4F2EC 72%,rgba(244,242,236,0));display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:700;color:#14202E;padding:0 4px">
+              <span>9:41</span>
+              <span style="letter-spacing:.06em">▮▮▮ ▰</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <svg viewBox="0 0 100 100" width="24" height="24">
+                <path d="M74.04 25.96 A34 34 0 1 1 35.63 19.19" fill="none" stroke="#14202E" stroke-width="12" stroke-linecap="round"></path>
+                <polygon points="47.4,13.7 39.4,27.4 31.8,11.0" fill="#14202E"></polygon>
+                <polyline points="35,51 45,61 65,40" fill="none" stroke="#12A05F" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"></polyline>
+              </svg>
+              <span style="font-size:19px;font-weight:800;letter-spacing:-.035em;font-variation-settings:'wdth' 110">VoltaCheck</span>
+              <span style="font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:99px;background:#fff;border:1px solid rgba(18,160,95,.4);color:#12A05F">Em direto</span>
+            </div>
+          </div>
+
+          <div style="position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:26px 26px 0 0;padding:14px 18px 26px;box-shadow:0 -10px 34px rgba(20,32,46,.18);display:flex;flex-direction:column;gap:0">
+            <div style="width:38px;height:4px;border-radius:99px;background:#DCDAD2;margin:0 auto 14px"></div>
+            <h2 style="margin:0;font-size:21px;font-weight:800;letter-spacing:-.025em;line-height:1.2">Pingo Doce Areeiro</h2>
+            <p style="margin:6px 0 0;font-size:13px;font-weight:500;color:#6B7688">Lisboa · a 240 m</p>
+            <div style="display:flex;align-items:center;gap:7px;align-self:flex-start;margin-top:12px;padding:6px 12px;border-radius:99px;background:#12A05F;color:#fff;font-size:12.5px;font-weight:700">A funcionar · há 12 min</div>
+            <p style="margin:18px 0 0;font-size:11px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#6B7688">Estiveste lá agora?</p>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:10px">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 6px;border-radius:16px;border:1.5px solid #12A05F;background:rgba(18,160,95,.07);font-size:12.5px;font-weight:700"><i style="width:12px;height:12px;border-radius:99px;background:#12A05F;font-style:normal"></i>A funcionar</div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 6px;border-radius:16px;border:1.5px solid #DCDAD2;background:#fff;font-size:12.5px;font-weight:700"><i style="width:12px;height:12px;border-radius:99px;background:#E39B22;font-style:normal"></i>Cheia</div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 6px;border-radius:16px;border:1.5px solid #DCDAD2;background:#fff;font-size:12.5px;font-weight:700"><i style="width:12px;height:12px;border-radius:99px;background:#DE4A3F;font-style:normal"></i>Avariada</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;margin-top:16px;padding-top:12px;border-top:1px solid #EAE8E1;font-size:12px;font-weight:500;color:#6B7688">
+              <div style="display:flex;justify-content:space-between;gap:10px"><span style="font-weight:700;color:#14202E">A funcionar</span><span>há 12 min</span></div>
+              <div style="display:flex;justify-content:space-between;gap:10px"><span style="font-weight:700;color:#14202E">Cheia</span><span>há 5 h</span></div>
+              <div style="display:flex;justify-content:space-between;gap:10px"><span style="font-weight:700;color:#14202E">A funcionar</span><span>há 1 d</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;align-items:baseline;gap:10px">
+        <span style="font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#14202E">Adicionar</span>
+        <span style="font-size:13px;font-weight:500;color:#6B7688">vai para revisão</span>
+      </div>
+      <div style="position:relative;width:352px;height:722px;border-radius:46px;background:#14202E;padding:11px;box-shadow:0 24px 60px rgba(20,32,46,.22)">
+        <div style="position:relative;width:100%;height:100%;border-radius:36px;overflow:hidden;background:#E8E6DE">
+          <div style="position:absolute;left:-60px;top:180px;width:520px;height:24px;background:#F4F2EC;transform:rotate(-9deg)"></div>
+          <div style="position:absolute;left:170px;top:-40px;width:22px;height:900px;background:#F4F2EC;transform:rotate(-6deg)"></div>
+          <div style="position:absolute;left:-20px;top:60px;width:160px;height:130px;border-radius:60px;background:#DCE4D8;transform:rotate(-12deg)"></div>
+          <div style="position:absolute;left:152px;top:186px;width:40px;height:40px;border-radius:99px;border:3px solid #1F4FD8;background:rgba(31,79,216,.16)"></div>
+          <div style="position:absolute;left:60px;top:126px;width:30px;height:30px;border-radius:99px;background:#12A05F;border:3px solid #fff;box-shadow:0 3px 8px rgba(20,32,46,.3)"></div>
+
+          <div style="position:absolute;left:0;right:0;top:0;padding:10px 14px 18px;background:linear-gradient(180deg,#F4F2EC 74%,rgba(244,242,236,0));display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:700;color:#14202E;padding:0 4px">
+              <span>9:41</span>
+              <span style="letter-spacing:.06em">▮▮▮ ▰</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <svg viewBox="0 0 100 100" width="24" height="24">
+                <path d="M74.04 25.96 A34 34 0 1 1 35.63 19.19" fill="none" stroke="#14202E" stroke-width="12" stroke-linecap="round"></path>
+                <polygon points="47.4,13.7 39.4,27.4 31.8,11.0" fill="#14202E"></polygon>
+                <polyline points="35,51 45,61 65,40" fill="none" stroke="#12A05F" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"></polyline>
+              </svg>
+              <span style="font-size:19px;font-weight:800;letter-spacing:-.035em;font-variation-settings:'wdth' 110">VoltaCheck</span>
+            </div>
+          </div>
+
+          <div style="position:absolute;left:14px;right:14px;bottom:22px;background:#fff;border:1px solid #DCDAD2;border-radius:22px;padding:16px;box-shadow:0 -6px 26px rgba(20,32,46,.16);display:flex;flex-direction:column;gap:10px">
+            <p style="margin:0;font-size:12.5px;font-weight:600;color:#6B7688">Arrasta o mapa até a máquina ficar dentro do círculo.</p>
+            <div style="padding:13px 14px;border-radius:13px;border:1.5px solid #DCDAD2;background:#F4F2EC;font-size:14.5px;font-weight:600">Continente Colombo</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;border-radius:13px;border:1.5px solid #DCDAD2;background:#F4F2EC;font-size:14.5px;font-weight:600"><span>Continente</span><span style="color:#8A93A3">⌄</span></div>
+            <div style="padding:13px 14px;border-radius:13px;border:1.5px solid #DCDAD2;background:#F4F2EC;font-size:14.5px;font-weight:600">Lisboa</div>
+            <div style="padding:13px 14px;border-radius:13px;border:1.5px solid #DCDAD2;background:#F4F2EC;font-size:14.5px;font-weight:500;color:#8A93A3">Nota (opcional) — ex.: ao lado da entrada</div>
+            <div style="display:flex;gap:9px;margin-top:2px">
+              <div style="flex:1;display:grid;place-items:center;padding:13px;border-radius:13px;border:1.5px solid #DCDAD2;background:#fff;font-size:14px;font-weight:700">Cancelar</div>
+              <div style="flex:1;display:grid;place-items:center;padding:13px;border-radius:13px;background:#14202E;color:#F4F2EC;font-size:14px;font-weight:700">Adicionar</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;align-items:baseline;gap:10px">
+        <span style="font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#14202E">Filtros</span>
+        <span style="font-size:13px;font-weight:500;color:#6B7688">um sítio só, pronto a crescer</span>
+      </div>
+      <div style="position:relative;width:352px;height:722px;border-radius:46px;background:#14202E;padding:11px;box-shadow:0 24px 60px rgba(20,32,46,.22)">
+        <div style="position:relative;width:100%;height:100%;border-radius:36px;overflow:hidden;background:#E8E6DE">
+          <div style="position:absolute;left:-60px;top:150px;width:520px;height:24px;background:#F4F2EC;transform:rotate(-9deg)"></div>
+          <div style="position:absolute;left:150px;top:-40px;width:22px;height:900px;background:#F4F2EC;transform:rotate(7deg)"></div>
+          <div style="position:absolute;left:88px;top:120px;width:30px;height:30px;border-radius:99px;background:#12A05F;border:3px solid #fff;box-shadow:0 3px 8px rgba(20,32,46,.3)"></div>
+          <div style="position:absolute;inset:0;background:rgba(20,32,46,.34)"></div>
+
+          <div style="position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:26px 26px 0 0;padding:14px 0 0;box-shadow:0 -10px 34px rgba(20,32,46,.22);display:flex;flex-direction:column;max-height:88%">
+            <div style="width:38px;height:4px;border-radius:99px;background:#DCDAD2;margin:0 auto 12px"></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:0 18px 12px;border-bottom:1px solid #EAE8E1">
+              <h2 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.03em">Filtros</h2>
+              <span style="font-size:12.5px;font-weight:700;color:#1F4FD8">Limpar (2)</span>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:20px;padding:16px 18px 18px;overflow:hidden">
+              <div style="display:flex;flex-direction:column;gap:9px">
+                <div style="display:flex;align-items:baseline;justify-content:space-between">
+                  <span style="font-size:11px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#6B7688">Estado</span>
+                  <span style="font-size:11px;font-weight:700;color:#8A93A3">1 de 4</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:1px;border:1px solid #EAE8E1;border-radius:14px;overflow:hidden">
+                  <div style="display:flex;align-items:center;gap:10px;padding:12px 13px;background:rgba(18,160,95,.07)">
+                    <i style="display:grid;place-items:center;width:19px;height:19px;border-radius:6px;background:#12A05F;color:#fff;font-size:12px;font-weight:800;font-style:normal">✓</i>
+                    <i style="width:9px;height:9px;border-radius:99px;background:#12A05F;font-style:normal"></i>
+                    <span style="flex:1;font-size:14px;font-weight:700">A funcionar</span>
+                    <span style="font-size:13px;font-weight:700;color:#6B7688">412</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:10px;padding:12px 13px;background:#fff;border-top:1px solid #EAE8E1">
+                    <i style="width:19px;height:19px;border-radius:6px;border:1.5px solid #DCDAD2;font-style:normal"></i>
+                    <i style="width:9px;height:9px;border-radius:99px;background:#E39B22;font-style:normal"></i>
+                    <span style="flex:1;font-size:14px;font-weight:600">Cheias</span>
+                    <span style="font-size:13px;font-weight:700;color:#6B7688">63</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:10px;padding:12px 13px;background:#fff;border-top:1px solid #EAE8E1">
+                    <i style="width:19px;height:19px;border-radius:6px;border:1.5px solid #DCDAD2;font-style:normal"></i>
+                    <i style="width:9px;height:9px;border-radius:99px;background:#DE4A3F;font-style:normal"></i>
+                    <span style="flex:1;font-size:14px;font-weight:600">Avariadas</span>
+                    <span style="font-size:13px;font-weight:700;color:#6B7688">28</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:10px;padding:12px 13px;background:#fff;border-top:1px solid #EAE8E1">
+                    <i style="width:19px;height:19px;border-radius:6px;border:1.5px solid #DCDAD2;font-style:normal"></i>
+                    <i style="width:9px;height:9px;border-radius:99px;background:#98A0AE;font-style:normal"></i>
+                    <span style="flex:1;font-size:14px;font-weight:600">Sem dados há 18 h</span>
+                    <span style="font-size:13px;font-weight:700;color:#6B7688">1 941</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:9px">
+                <span style="font-size:11px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#6B7688">Cadeia</span>
+                <div style="display:flex;flex-wrap:wrap;gap:7px">
+                  <span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;padding:9px 13px;border-radius:99px;background:#14202E;color:#F4F2EC">Pingo Doce<em style="font-style:normal;font-weight:800;color:#8FA0BB">318</em></span>
+                  <span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:9px 13px;border-radius:99px;background:#fff;border:1px solid #DCDAD2">Continente<em style="font-style:normal;font-weight:700;color:#8A93A3">294</em></span>
+                  <span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:9px 13px;border-radius:99px;background:#fff;border:1px solid #DCDAD2">Lidl<em style="font-style:normal;font-weight:700;color:#8A93A3">211</em></span>
+                  <span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:9px 13px;border-radius:99px;background:#fff;border:1px solid #DCDAD2">Auchan<em style="font-style:normal;font-weight:700;color:#8A93A3">96</em></span>
+                  <span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;padding:9px 13px;border-radius:99px;background:#F4F2EC;color:#1F4FD8">+ 6 cadeias</span>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:9px">
+                <span style="font-size:11px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#6B7688">Distância</span>
+                <div style="display:flex;gap:2px;padding:3px;border-radius:13px;background:#F4F2EC;border:1px solid #EAE8E1">
+                  <span style="flex:1;display:grid;place-items:center;padding:9px 0;border-radius:10px;font-size:13px;font-weight:700;background:#fff;box-shadow:0 1px 3px rgba(20,32,46,.14)">1 km</span>
+                  <span style="flex:1;display:grid;place-items:center;padding:9px 0;border-radius:10px;font-size:13px;font-weight:600;color:#6B7688">5 km</span>
+                  <span style="flex:1;display:grid;place-items:center;padding:9px 0;border-radius:10px;font-size:13px;font-weight:600;color:#6B7688">25 km</span>
+                  <span style="flex:1;display:grid;place-items:center;padding:9px 0;border-radius:10px;font-size:13px;font-weight:600;color:#6B7688">Todas</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex;gap:9px;padding:12px 18px calc(18px + 8px);border-top:1px solid #EAE8E1;background:#fff">
+              <span style="flex:1;display:grid;place-items:center;padding:14px;border-radius:14px;background:#14202E;color:#F4F2EC;font-size:14.5px;font-weight:700">Ver 412 máquinas</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <sc-if value="{{ showSpecs }}" hint-placeholder-val="{{ true }}">
+    <section style="display:grid;grid-template-columns:1.1fr 1fr;gap:40px;padding:40px;border-radius:28px;background:#fff;border:1px solid #E4E2DA">
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <span style="font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#6B7688">Paleta</span>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+          <div style="display:flex;flex-direction:column;gap:8px"><div style="height:76px;border-radius:14px;background:#14202E"></div><span style="font-size:12px;font-weight:700">Tinta #14202E</span></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><div style="height:76px;border-radius:14px;background:#F4F2EC;border:1px solid #E4E2DA"></div><span style="font-size:12px;font-weight:700">Papel #F4F2EC</span></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><div style="height:76px;border-radius:14px;background:#1F4FD8"></div><span style="font-size:12px;font-weight:700">Azulejo #1F4FD8</span></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><div style="height:76px;border-radius:14px;background:#12A05F"></div><span style="font-size:12px;font-weight:700">Verde #12A05F</span></div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px">
+          <span style="display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;padding:8px 13px;border-radius:99px;background:#F4F2EC"><i style="width:10px;height:10px;border-radius:99px;background:#12A05F;font-style:normal"></i>A funcionar</span>
+          <span style="display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;padding:8px 13px;border-radius:99px;background:#F4F2EC"><i style="width:10px;height:10px;border-radius:99px;background:#E39B22;font-style:normal"></i>Cheia</span>
+          <span style="display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;padding:8px 13px;border-radius:99px;background:#F4F2EC"><i style="width:10px;height:10px;border-radius:99px;background:#DE4A3F;font-style:normal"></i>Avariada</span>
+          <span style="display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;padding:8px 13px;border-radius:99px;background:#F4F2EC"><i style="width:10px;height:10px;border-radius:99px;background:#98A0AE;font-style:normal"></i>Sem dados · 18 h</span>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <span style="font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#6B7688">Tipografia — Archivo</span>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <span style="font-size:44px;font-weight:800;letter-spacing:-.04em;font-variation-settings:'wdth' 112;line-height:1">Aa VoltaCheck</span>
+          <span style="font-size:12px;font-weight:600;color:#6B7688">Logótipo · 800, largura 112, tracking -4%</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <span style="font-size:21px;font-weight:800;letter-spacing:-.025em">Pingo Doce Areeiro</span>
+          <span style="font-size:12px;font-weight:600;color:#6B7688">Título de máquina · 800</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <span style="font-size:14px;font-weight:500;color:#6B7688">Lisboa · a 240 m</span>
+          <span style="font-size:12px;font-weight:600;color:#6B7688">Meta · 500</span>
+        </div>
+        <p style="margin:6px 0 0;font-size:12.5px;font-weight:500;color:#6B7688;line-height:1.5">Projeto comunitário, sem afiliação com a SDR Portugal nem com a marca Volta. Dados das máquinas do OpenStreetMap (ODbL).</p>
+      </div>
+    </section>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showSpecs&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;densePins&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  renderVals(){
+    return {
+      showSpecs: this.props.showSpecs ?? true,
+      densePins: this.props.densePins ?? true,
+    };
+  }
+}
+</script>
+</body>
+</html>

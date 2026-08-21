@@ -56,7 +56,7 @@ test.describe('map', () => {
     await expect(page.locator('#s-state')).toContainText('Sem dados recentes');
   });
 
-  test('reporting a status updates the sheet and the tally, and persists', async ({ page }) => {
+  test('reporting a status updates the sheet and the status counts, and persists', async ({ page }) => {
     await gotoApp(page);
 
     const box = await centerPin(page);
@@ -67,7 +67,14 @@ test.describe('map', () => {
     await page.waitForTimeout(900);
 
     await expect(page.locator('#s-state')).toContainText('Cheia');
-    await expect(page.locator('#tally')).toContainText('1 cheias');
+
+    // The status counts live in the filter sheet now, not a topbar row.
+    await page.click('#filterbtn');
+    await expect(page.locator('#filters')).toBeVisible();
+    await expect(
+      page.locator('#statuslist button', { hasText: 'Cheias' }).locator('b')
+    ).toHaveText('1');
+    await page.click('#scrim');
 
     const stored = await page.evaluate(() => localStorage.getItem('centimo.v2'));
     expect(stored).toBeTruthy();
@@ -80,9 +87,14 @@ test.describe('map', () => {
     // whole 2,444-machine seed list.
     expect(stored.length).toBeLessThan(2000);
 
+    // The report survives a reload — the point of persisting it at all.
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2500);
-    await expect(page.locator('#tally')).toContainText('1 cheias');
+    await page.click('#filterbtn');
+    await expect(page.locator('#filters')).toBeVisible();
+    await expect(
+      page.locator('#statuslist button', { hasText: 'Cheias' }).locator('b')
+    ).toHaveText('1');
   });
 
   test('a stale v1 localStorage cache does not mask the current seed', async ({ page }) => {

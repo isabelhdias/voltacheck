@@ -1,0 +1,135 @@
+{
+  "description": "filterByDistance(machines, from, metres) narrows the map to machines within a radius of the user. Two cases carry the design decisions and a port must reproduce both: a null radius means \"Todas\" and returns everything, and a missing position ALSO returns everything rather than nothing — the filter cannot measure without an origin, and an empty map would read as 'there is nothing near you' when the truth is 'we do not know where you are'. The boundary is inclusive.",
+  "filterByDistanceCases": [
+    {
+      "id": "inside-the-radius-only",
+      "description": "1 km around Praça do Comércio: the two nearby machines, not the one in Porto.",
+      "machines": [
+        {
+          "id": "perto",
+          "lat": 38.708,
+          "lng": -9.136
+        },
+        {
+          "id": "medio",
+          "lat": 38.713,
+          "lng": -9.1355
+        },
+        {
+          "id": "porto",
+          "lat": 41.1496,
+          "lng": -8.6109
+        }
+      ],
+      "from": {
+        "lat": 38.7071,
+        "lng": -9.1355
+      },
+      "metres": 1000,
+      "expectedIds": [
+        "perto",
+        "medio"
+      ]
+    },
+    {
+      "id": "boundary-is-inclusive",
+      "description": "A machine at exactly the radius is inside it. The radius here is the measured distance to the machine, not a round number, so this asserts <= rather than < at true equality — a port using < fails this case and passes every other one.",
+      "machines": [
+        {
+          "id": "na-fronteira",
+          "lat": 38.7116,
+          "lng": -9.1355
+        }
+      ],
+      "from": {
+        "lat": 38.7071,
+        "lng": -9.1355
+      },
+      "metres": 500.3771699005333,
+      "expectedIds": [
+        "na-fronteira"
+      ]
+    },
+    {
+      "id": "just-outside-the-radius-is-out",
+      "description": "The same machine one centimetre beyond the radius is excluded — the pair with the case above pins the comparison exactly.",
+      "machines": [
+        {
+          "id": "na-fronteira",
+          "lat": 38.7116,
+          "lng": -9.1355
+        }
+      ],
+      "from": {
+        "lat": 38.7071,
+        "lng": -9.1355
+      },
+      "metres": 500.3671699005333,
+      "expectedIds": []
+    },
+    {
+      "id": "null-radius-means-todas",
+      "description": "No radius selected returns every machine untouched.",
+      "machines": [
+        {
+          "id": "perto",
+          "lat": 38.708,
+          "lng": -9.136
+        },
+        {
+          "id": "porto",
+          "lat": 41.1496,
+          "lng": -8.6109
+        }
+      ],
+      "from": {
+        "lat": 38.7071,
+        "lng": -9.1355
+      },
+      "metres": null,
+      "expectedIds": [
+        "perto",
+        "porto"
+      ]
+    },
+    {
+      "id": "no-position-returns-everything-not-nothing",
+      "description": "The important one. With no fix the radius cannot be applied, so every machine stays. Returning nothing would tell someone the map is empty near them when we simply do not know where they are.",
+      "machines": [
+        {
+          "id": "perto",
+          "lat": 38.708,
+          "lng": -9.136
+        },
+        {
+          "id": "porto",
+          "lat": 41.1496,
+          "lng": -8.6109
+        }
+      ],
+      "from": null,
+      "metres": 1000,
+      "expectedIds": [
+        "perto",
+        "porto"
+      ]
+    },
+    {
+      "id": "radius-that-matches-nothing-is-honestly-empty",
+      "description": "With a real position and a real radius, an empty result is a true answer and must not be softened.",
+      "machines": [
+        {
+          "id": "porto",
+          "lat": 41.1496,
+          "lng": -8.6109
+        }
+      ],
+      "from": {
+        "lat": 38.7071,
+        "lng": -9.1355
+      },
+      "metres": 1000,
+      "expectedIds": []
+    }
+  ]
+}
