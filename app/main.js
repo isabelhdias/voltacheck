@@ -5,6 +5,7 @@
 import * as store from './store.js';
 import * as api from './api.js';
 import { CHAINS } from './config.js';
+import { suggestTown, knownTowns } from './domain.js';
 import { map, draw, setOnSelect } from './map.js';
 import * as ui from './ui.js';
 
@@ -37,15 +38,28 @@ async function connect(){
 
 /* ───────── add machine ───────── */
 //
-// Grew from "drop a named pin" into a submission form: name, chain, an
-// optional note. In live mode this goes into a review queue and never
-// touches the map or the store — a submission isn't a machine until someone
-// approves it. Local mode is unchanged: no queue to speak of without a
-// shared database, so it still adds directly, same as before.
+// Grew from "drop a named pin" into a submission form: name, chain,
+// concelho, an optional address and an optional note. In live mode this
+// goes into a review queue and never touches the map or the store — a
+// submission isn't a machine until someone approves it. Local mode is
+// unchanged: no queue to speak of without a shared database, so it still
+// adds directly, same as before.
+//
+// The concelho is a real field rather than something the database works out
+// afterwards. It used to be derived from the nearest existing machine with
+// no distance limit, which filed a submission 18.8 km from its neighbour
+// under the neighbour's concelho — wrong, and invisible until a town search
+// came up empty. It is still prefilled from a nearby machine, because
+// that is right almost every time and saves typing, but it is prefilled
+// into a box the person can see and correct, and only when there is
+// something close enough to be worth suggesting.
 
 var nameInput   = document.getElementById("add-name");
 var chainSelect = document.getElementById("add-chain");
+var townInput   = document.getElementById("add-town");
+var addrInput   = document.getElementById("add-address");
 var noteInput   = document.getElementById("add-note");
+var townList    = document.getElementById("towns");
 var saveBtn     = document.getElementById("add-save");
 
 // Built from app/config.js's CHAINS, not hand-duplicated in index.html — one
@@ -64,12 +78,28 @@ var saveBtn     = document.getElementById("add-save");
   });
 })();
 
+// Suggestions only — a concelho with no machine yet is still a legitimate
+// answer, so the field stays free text and the list just saves typing.
+function fillTownList(){
+  townList.innerHTML = "";
+  knownTowns(store.machines).forEach(function(t){
+    var opt = document.createElement("option");
+    opt.value = t;
+    townList.appendChild(opt);
+  });
+}
+
 document.getElementById("add").addEventListener("click", function(){
   ui.closeSheet();
   document.body.classList.add("adding");
   nameInput.value = "";
   chainSelect.value = "";
+  addrInput.value = "";
   noteInput.value = "";
+
+  fillTownList();
+  var c = map.getCenter();
+  townInput.value = suggestTown(store.machines, c.lat, c.lng);
 });
 
 document.getElementById("add-cancel").addEventListener("click", function(){
@@ -84,16 +114,27 @@ saveBtn.addEventListener("click", async function(){
     return;
   }
 
+  var town = townInput.value.trim();
+  if(!town){
+    townInput.focus();
+    ui.toast("Falta o concelho — é como as pessoas a encontram");
+    return;
+  }
+
   var chain = chainSelect.value || null;
+  var addr  = addrInput.value.trim() || null;
   var note  = noteInput.value.trim() || null;
   var c = map.getCenter();
   saveBtn.disabled = true;
 
-  var r = await api.submitMachine({ name:name, chain:chain, note:note, lat:c.lat, lng:c.lng });
+  var r = await api.submitMachine({ name:name, chain:chain, note:note,
+                                    town:town, address:addr,
+                                    lat:c.lat, lng:c.lng });
 
   if(r === "ok-local"){
     store.machines.push({ id: "u-" + Date.now(), name: name, lat: c.lat, lng: c.lng,
-                           town: "", chain: chain || "Outras", src: "user", reports: [] });
+                           town: town, address: addr, chain: chain || "Outras",
+                           src: "user", reports: [] });
     store.localSave();
     document.body.classList.remove("adding");
     ui.buildChainChips();

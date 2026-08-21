@@ -11,6 +11,8 @@ import { fileURLToPath } from 'node:url';
 
 import {
   statusOf,
+  suggestTown,
+  knownTowns,
   needsReconfirm,
   ago,
   norm,
@@ -219,5 +221,28 @@ test('statusCounts — buckets by statusOf(), independent of any status filter',
   for (const c of statusCountsCases) {
     const got = statusCounts(c.machines, c.now);
     assert.deepEqual(got, c.expected, `${c.id}: ${c.description ?? ''}`);
+  }
+});
+
+/* ───────── town-suggestion.json: suggestTown ───────── */
+
+test('suggestTown — the nearest machine\'s concelho, but only inside the radius', () => {
+  const { suggestTownCases } = loadVector('town-suggestion.json');
+  assert.ok(suggestTownCases.length > 0, 'vector file has no cases');
+
+  for (const c of suggestTownCases) {
+    const got = suggestTown(c.machines, c.lat, c.lng, c.within);
+    assert.equal(got, c.expected, `${c.id}: ${c.description ?? ''}`);
+  }
+});
+
+/* ───────── town-suggestion.json: knownTowns ───────── */
+
+test('knownTowns — each concelho once, ordered the way the search box normalises', () => {
+  const { knownTownsCases } = loadVector('town-suggestion.json');
+  assert.ok(knownTownsCases.length > 0, 'vector file has no cases');
+
+  for (const c of knownTownsCases) {
+    assert.deepEqual(knownTowns(c.machines), c.expected, `${c.id}: ${c.description ?? ''}`);
   }
 });

@@ -307,10 +307,21 @@ When someone adds a machine that isn't on the map yet, it doesn't go straight
 into `machines` — it lands in `machine_submissions` with `status = 'pending'`
 and waits for you to look at it. Here's the whole loop, end to end.
 
-1. **Someone submits a machine.** The app writes a row to
-   `machine_submissions`, along with anything useful for judging it: how far
+1. **Someone submits a machine.** The form asks for the name, the chain,
+   the **concelho**, an optional address and an optional note, and takes the
+   position from wherever they dragged the crosshair. The app writes that to
+   `machine_submissions` along with anything useful for judging it: how far
    they were from the spot, the nearest machine already on the map and how
    close it is, and whether that closeness makes it look like a duplicate.
+
+   The concelho is asked for rather than worked out. It used to be copied
+   from the nearest existing machine however far away that was, and the
+   first real submission sat 18.8 km from its neighbour and was filed under
+   the neighbour's concelho — so a town search would never have found it.
+   The form still prefills it from a machine within 2 km, because that is
+   right almost every time, but into a box the submitter can see and
+   correct. With nothing within 2 km it stays empty, and the review issue
+   marks that machine **⚠ sem concelho** rather than showing a guess.
 
 2. **A GitHub Action notices and opens an issue.** The `Review queue`
    workflow runs a few times a day (and any time you run it by hand from the

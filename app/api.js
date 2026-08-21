@@ -125,6 +125,8 @@ export async function submitMachine(fields){
     name:     fields.name,
     chain:    fields.chain,
     note:     fields.note,
+    town:     fields.town,
+    address:  fields.address,
     lat:      fields.lat,
     lng:      fields.lng,
     from_lat: pos ? pos.lat : null,

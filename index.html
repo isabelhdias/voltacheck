@@ -238,7 +238,8 @@
     width:100%;padding:11px 12px;font:inherit;font-size:15px;font-weight:500;
     border:1.5px solid var(--line);border-radius:11px;background:var(--paper);color:var(--ink);
   }
-  .addbar input + input, .addbar input + select, .addbar select + input{margin-top:9px}
+  .addbar input + input, .addbar input + select, .addbar select + input,
+  .addbar datalist + input{margin-top:9px}
   .addbar .row{display:flex;gap:8px;margin-top:9px}
   .addbar button{
     flex:1;padding:11px;font:inherit;font-weight:700;font-size:14px;border-radius:11px;
@@ -309,6 +310,9 @@
   <p>Arrasta o mapa até a máquina ficar dentro do círculo.</p>
   <input id="add-name" placeholder="Onde é? Ex.: Pingo Doce Areeiro" autocomplete="off" maxlength="80">
   <select id="add-chain" aria-label="Cadeia"></select>
+  <input id="add-town" placeholder="Concelho — ex.: Pampilhosa da Serra" autocomplete="off" maxlength="60" list="towns">
+  <datalist id="towns"></datalist>
+  <input id="add-address" placeholder="Morada (opcional) — ex.: R. do Comércio 12" autocomplete="off" maxlength="120">
   <input id="add-note" placeholder="Nota (opcional) — ex.: ao lado da entrada" autocomplete="off" maxlength="140">
   <div class="row">
     <button id="add-cancel">Cancelar</button>

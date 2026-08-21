@@ -1,0 +1,80 @@
+{
+  "description": "suggestTown(machines, lat, lng, within) proposes a concelho to PREFILL the add-machine form with, and knownTowns(machines) lists the concelhos already on the map for the field's suggestion list. suggestTown is deliberately conservative: outside the radius it returns \"\" rather than a guess. That is not a detail — the database previously derived a submission's concelho from its nearest machine with no distance limit, and the first real submission landed 18.8 km away from its neighbour and was filed under the wrong concelho. A port must reproduce the empty answer, not just the populated one.",
+  "suggestTownCases": [
+    {
+      "id": "nearest-machine-a-few-metres-away",
+      "description": "Standing next to an existing machine: its concelho is a good guess.",
+      "machines": [
+        { "town": "Lisboa", "lat": 38.7223, "lng": -9.1393 },
+        { "town": "Porto",  "lat": 41.1496, "lng": -8.6109 }
+      ],
+      "lat": 38.7225, "lng": -9.1395,
+      "expected": "Lisboa"
+    },
+    {
+      "id": "the-pampilhosa-case-nearest-is-18km-away",
+      "description": "The real submission that exposed the bug: 18.8 km from the nearest machine, which sits in a different concelho. Must suggest nothing.",
+      "machines": [
+        { "town": "Góis", "lat": 40.1552, "lng": -8.1103 }
+      ],
+      "lat": 40.0419, "lng": -7.9486,
+      "expected": ""
+    },
+    {
+      "id": "just-inside-the-default-radius",
+      "description": "~1.5 km away, inside the 2 km default — still a reasonable guess.",
+      "machines": [{ "town": "Coimbra", "lat": 40.2100, "lng": -8.4290 }],
+      "lat": 40.19652, "lng": -8.4290,
+      "expected": "Coimbra"
+    },
+    {
+      "id": "just-outside-the-default-radius",
+      "description": "~3.3 km away, past the 2 km default. Silence beats a wrong concelho.",
+      "machines": [{ "town": "Coimbra", "lat": 40.2100, "lng": -8.4290 }],
+      "lat": 40.18, "lng": -8.4290,
+      "expected": ""
+    },
+    {
+      "id": "explicit-radius-is-honoured",
+      "description": "Passing `within` widens or narrows the radius; 5 km accepts the same 3.3 km neighbour the default rejected.",
+      "machines": [{ "town": "Coimbra", "lat": 40.2100, "lng": -8.4290 }],
+      "lat": 40.18, "lng": -8.4290,
+      "within": 5000,
+      "expected": "Coimbra"
+    },
+    {
+      "id": "machines-without-a-town-are-skipped",
+      "description": "A closer machine with no concelho must not shadow a usable one behind it — a user-added machine can legitimately have no town yet.",
+      "machines": [
+        { "town": "",       "lat": 38.7223, "lng": -9.1393 },
+        { "town": "Lisboa", "lat": 38.7228, "lng": -9.1398 }
+      ],
+      "lat": 38.7224, "lng": -9.1394,
+      "expected": "Lisboa"
+    },
+    {
+      "id": "no-machines-at-all",
+      "description": "An empty map suggests nothing rather than throwing.",
+      "machines": [],
+      "lat": 38.7223, "lng": -9.1393,
+      "expected": ""
+    }
+  ],
+  "knownTownsCases": [
+    {
+      "id": "distinct-and-sorted-ignoring-accents",
+      "description": "Each concelho once, ordered the same way the search box normalises — so Ã‰vora files under E, not after Z.",
+      "machines": [
+        { "town": "Lisboa" }, { "town": "Évora" }, { "town": "Lisboa" },
+        { "town": "Aveiro" }, { "town": "" }, { "town": null }
+      ],
+      "expected": ["Aveiro", "Évora", "Lisboa"]
+    },
+    {
+      "id": "empty-map-has-no-towns",
+      "description": "No machines, no suggestions.",
+      "machines": [],
+      "expected": []
+    }
+  ]
+}

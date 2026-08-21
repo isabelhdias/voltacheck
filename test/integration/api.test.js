@@ -297,22 +297,102 @@ if (!dockerAvailable()) {
     assert.equal(result, 'invalid');
   });
 
-  test('submit_machine: town is derived from the nearest existing machine, not left null', LONG, async () => {
+  test('submit_machine: the submitted town is stored as given, not overwritten by the neighbour\'s', LONG, async () => {
     const [m] = await (await fetch(`${BASE_URL}/machines?select=id,lat,lng,town&limit=1`)).json();
     assert.ok(m.town, 'sanity: fixture machine has a town');
 
-    // A small nudge — close enough that m stays the nearest neighbour, far
-    // enough it clears the 75m duplicate threshold.
+    // Right next to a machine in a known concelho, but naming a different
+    // one. What the person typed wins — they are standing there.
     const result = await submitMachine(
-      { name: 'Nova Máquina Perto Do Vizinho', lat: m.lat + 0.001, lng: m.lng + 0.001, device: 'sub-town' },
-      '91.1.1.2',
+      { name: 'Concelho Escolhido À Mão', lat: m.lat + 0.001, lng: m.lng + 0.001,
+        town: 'Concelho Improvável', device: 'sub-town-explicit' },
+      '91.1.1.20',
+    );
+    assert.equal(result, 'ok');
+    assert.equal(
+      superuserScalar("select town from machine_submissions where name = 'Concelho Escolhido À Mão' order by created_at desc limit 1;"),
+      'Concelho Improvável',
+    );
+  });
+
+  test('submit_machine: a blank town falls back to a neighbour within 2km', LONG, async () => {
+    const [m] = await (await fetch(`${BASE_URL}/machines?select=id,lat,lng,town&limit=1`)).json();
+    const result = await submitMachine(
+      { name: 'Sem Concelho Mas Perto', lat: m.lat + 0.001, lng: m.lng + 0.001, device: 'sub-town-near' },
+      '91.1.1.21',
+    );
+    assert.equal(result, 'ok');
+    assert.equal(
+      superuserScalar("select town from machine_submissions where name = 'Sem Concelho Mas Perto' order by created_at desc limit 1;"),
+      m.town,
+      'a close neighbour is still a good enough guess to borrow',
+    );
+  });
+
+  // The regression this whole change exists for. The first real submission
+  // sat 18.8 km from its nearest machine and was filed under that machine's
+  // concelho, so a town search would never have found it under the name it
+  // was given. Null is the correct answer here: it is visibly missing at
+  // review time instead of confidently wrong.
+  test('submit_machine: a blank town stays null when the nearest machine is far away', LONG, async () => {
+    // Somewhere deliberately remote — assert the emptiness rather than
+    // assume it, so this test cannot pass for the wrong reason.
+    const far = { lat: 40.0419, lng: -7.9486 };
+    const nearest = Number(
+      superuserScalar(
+        `select round(min(private.metres_between(${far.lat}, ${far.lng}, lat, lng))) from public.machines`,
+      ),
+    );
+    assert.ok(nearest > 2000, `fixture sanity: nearest machine is ${nearest}m away, needs to be >2000`);
+
+    const result = await submitMachine(
+      { name: 'Longe De Tudo', lat: far.lat, lng: far.lng, device: 'sub-town-far' },
+      '91.1.1.22',
+    );
+    assert.equal(result, 'ok');
+    assert.equal(
+      superuserScalar("select coalesce(town, '') from machine_submissions where name = 'Longe De Tudo' order by created_at desc limit 1;"),
+      '',
+    );
+  });
+
+  test('submit_machine: address is stored and survives approval into machines', LONG, async () => {
+    const [m] = await (await fetch(`${BASE_URL}/machines?select=id,lat,lng&limit=1`)).json();
+    const result = await submitMachine(
+      { name: 'Com Morada', lat: m.lat + 0.002, lng: m.lng + 0.002, town: 'Lisboa',
+        address: 'R. do Comércio 12', device: 'sub-address' },
+      '91.1.1.23',
     );
     assert.equal(result, 'ok');
 
-    const town = superuserScalar(
-      `select town from machine_submissions where name = 'Nova Máquina Perto Do Vizinho' order by created_at desc limit 1;`,
+    const id = superuserScalar("select id from machine_submissions where name = 'Com Morada' order by created_at desc limit 1;");
+    superuserQuery(`update machine_submissions set status = 'approved' where id = '${id}';`);
+
+    assert.equal(
+      superuserScalar(`select address from public.machines where id = (select machine_id from machine_submissions where id = '${id}')`),
+      'R. do Comércio 12',
+      'the address must not be dropped on the way into machines',
     );
-    assert.equal(town, m.town);
+  });
+
+  // Changing the parameter list without dropping the old signature would
+  // leave two overloads behind, and PostgREST answers 300 Multiple Choices
+  // when it cannot pick — every add-form call failing, not some subtle
+  // drift. schema.sql is applied twice here because that is exactly when a
+  // stale overload would survive.
+  test('submit_machine: exactly one overload exists, even after re-applying schema.sql', LONG, async () => {
+    reapplySchema();
+    assert.equal(
+      superuserScalar("select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname = 'submit_machine'"),
+      '1',
+    );
+
+    const [m] = await (await fetch(`${BASE_URL}/machines?select=id,lat,lng&limit=1`)).json();
+    const result = await submitMachine(
+      { name: 'Depois Da Migração', lat: m.lat + 0.003, lng: m.lng + 0.003, town: 'Porto', device: 'sub-overload' },
+      '91.1.1.24',
+    );
+    assert.equal(result, 'ok', 'a second overload would surface here as an error, not as ok');
   });
 
   test('submit_machine: likely_dupe is true under 75m and false over it', LONG, async () => {
@@ -480,25 +560,37 @@ if (!dockerAvailable()) {
   // seed/machines.sql into an existing database — and it half-failed once
   // already, so it gets the most scrutiny here.
 
-  test('seed/machines.sql upserts: reloading leaves 2444 rows and never touches a source=user row', LONG, async () => {
+  test('seed/machines.sql upserts: reloading duplicates nothing and never touches a source=user row', LONG, async () => {
+    // Counted relative to whatever is already here, and by source, rather
+    // than against one absolute total. Earlier tests in this file approve
+    // submissions, and every approval adds a machine — pinning the grand
+    // total made this test fail whenever a test above it was added, which
+    // says nothing about whether the seed upserts correctly.
+    const osmBefore = Number(superuserScalar(`select count(*) from machines where source = 'osm';`));
+    assert.equal(osmBefore, TOTAL_MACHINES, 'sanity: the seed is fully loaded before we reload it');
+
+    const userBefore = Number(superuserScalar(`select count(*) from machines where source = 'user';`));
     superuserQuery(
       `insert into machines (name, lat, lng, town, source)
        values ('Minha Máquina de Teste', 38.7, -9.1, 'Lisboa', 'user');`,
     );
-    const countBefore = Number(superuserScalar('select count(*) from machines;'));
-    assert.equal(countBefore, TOTAL_MACHINES + 1);
 
     assert.doesNotThrow(() => reapplySeed());
 
-    const countAfter = Number(superuserScalar('select count(*) from machines;'));
-    assert.equal(countAfter, TOTAL_MACHINES + 1, 'reloading the seed should upsert osm rows, not duplicate them');
-
-    const userRows = Number(superuserScalar(`select count(*) from machines where source = 'user';`));
-    assert.equal(userRows, 1, 'the hand-added machine must survive a re-import untouched');
-
-    const userName = superuserScalar(
-      `select name from machines where source = 'user';`,
+    assert.equal(
+      Number(superuserScalar(`select count(*) from machines where source = 'osm';`)),
+      TOTAL_MACHINES,
+      'reloading the seed should upsert osm rows, not duplicate them',
     );
-    assert.equal(userName, 'Minha Máquina de Teste');
+    assert.equal(
+      Number(superuserScalar(`select count(*) from machines where source = 'user';`)),
+      userBefore + 1,
+      'the re-import must neither delete nor duplicate machines people added',
+    );
+    assert.equal(
+      superuserScalar(`select name from machines where name = 'Minha Máquina de Teste';`),
+      'Minha Máquina de Teste',
+      'the hand-added machine must survive a re-import untouched',
+    );
   });
 }
