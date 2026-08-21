@@ -157,8 +157,15 @@ report look fresh.
   the real database. The whole site is rebuilt each run, so previews are
   always exactly the open PRs and a closed one disappears by itself. A
   failed preview is a warning, never a blocked deploy: previewing a change
-  must not be able to stop the live site shipping. Needs Pages source set
-  to "GitHub Actions".
+  must not be able to stop the live site shipping. Serves only
+  `seed/machines.js`, not the CSV/SQL beside it — those are Supabase import
+  inputs, 486 KB, and nothing in the browser reads them.
+
+  **Pages source must be "GitHub Actions".** While it is set to "deploy
+  from a branch", GitHub also runs its own `pages-build-deployment` on
+  every push, which publishes main's files alone and overwrites the
+  previews seconds later — both deployments report success and the preview
+  URL 404s a minute after it worked.
 - `.github/workflows/migrate.yml` — applies `schema.sql` and
   `seed/machines.sql` to the live database in one transaction, manual
   trigger only. Runs the integration suite first and verifies row counts

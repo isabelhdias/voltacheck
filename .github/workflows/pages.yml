@@ -61,11 +61,18 @@ jobs:
 
       - name: Assemble the live site
         run: |
-          mkdir -p _site
+          mkdir -p _site/seed
           # Everything the browser needs, and nothing else. Tests, tooling
           # and docs are not served; node_modules never even gets installed.
-          cp -r index.html app seed _site/
-          echo "Live site:"; ls _site
+          #
+          # Only machines.js from seed/ — it is the one file the app imports.
+          # machines.csv and machines.sql are inputs for loading Supabase,
+          # 486 KB between them, and serving them put that on every phone
+          # that opened the map for nothing.
+          cp index.html _site/
+          cp -r app _site/
+          cp seed/machines.js _site/seed/
+          echo "Live site:"; du -sh _site
 
           # The production values, taken from main rather than hardcoded
           # here, so this cannot drift when the keys are rotated. They are
@@ -103,8 +110,10 @@ jobs:
               rm -rf "$RUNNER_TEMP/wt" && git worktree add --detach "$RUNNER_TEMP/wt" "pr-$n"
 
               dest="_site/preview/pr-$n"
-              mkdir -p "$dest"
-              cp -r "$RUNNER_TEMP/wt/index.html" "$RUNNER_TEMP/wt/app" "$RUNNER_TEMP/wt/seed" "$dest/"
+              mkdir -p "$dest/seed"
+              cp "$RUNNER_TEMP/wt/index.html" "$dest/"
+              cp -r "$RUNNER_TEMP/wt/app" "$dest/"
+              cp "$RUNNER_TEMP/wt/seed/machines.js" "$dest/seed/"
 
               # Previews run in LOCAL MODE. Blanking these two values is what
               # keeps an unreviewed branch from writing to the live database
