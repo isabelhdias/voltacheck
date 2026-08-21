@@ -67,68 +67,146 @@
     border:1px solid var(--line);background:#fff;color:var(--ink-soft);
   }
   .mode[data-live="1"]{color:var(--ok);border-color:rgba(18,160,95,.4)}
-  .filterbadge{
-    pointer-events:auto;font:inherit;font-size:9.5px;font-weight:800;letter-spacing:.06em;
-    text-transform:uppercase;padding:2.5px 7px;border-radius:99px;
-    border:1px solid var(--azulejo);background:#fff;color:var(--azulejo);cursor:pointer;
-  }
-  .filterbadge[hidden]{display:none}
-  .chains{
-    display:flex;gap:6px;margin-top:8px;pointer-events:auto;
+  /* ── Filter bar: the button, plus a dismissible chip per active filter.
+     Replaces the two always-on chip rows. Those spent the top of a phone
+     screen on filters nobody had asked for; this spends it on the map and
+     surfaces only what is actually narrowing it. ── */
+  .filterbar{
+    display:flex;gap:7px;margin-top:9px;pointer-events:auto;align-items:center;
     overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
   }
-  .chains::-webkit-scrollbar{display:none}
-  .chains button{
-    flex:none;font:inherit;font-size:12px;font-weight:700;white-space:nowrap;
-    padding:6px 12px;border-radius:99px;border:1px solid var(--line);
+  .filterbar::-webkit-scrollbar{display:none}
+  .filterbtn{
+    flex:none;display:inline-flex;align-items:center;gap:7px;font:inherit;
+    font-size:12.5px;font-weight:700;padding:9px 14px;border-radius:99px;
+    border:0;background:var(--ink);color:var(--paper);cursor:pointer;white-space:nowrap;
+  }
+  .filterbtn i{display:inline-flex;flex-direction:column;gap:2.5px;font-style:normal}
+  .filterbtn i b{display:block;height:2px;border-radius:2px;background:var(--paper)}
+  .filterbtn i b:nth-child(1){width:13px}
+  .filterbtn i b:nth-child(2){width:9px}
+  .filterbtn i b:nth-child(3){width:5px}
+  .filterbtn em{
+    font-style:normal;display:grid;place-items:center;min-width:17px;height:17px;
+    padding:0 4px;border-radius:99px;background:#4BD495;color:#0B1B14;
+    font-size:10.5px;font-weight:800;
+  }
+  .filterbtn em[hidden]{display:none}
+  /* One chip per active filter, each its own undo. Removing a filter is the
+     commonest thing anyone does to a filter, and it should not require
+     opening the sheet that set it. */
+  .fchip{
+    flex:none;display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:12px;
+    font-weight:700;padding:8px 12px;border-radius:99px;border:1px solid var(--line);
+    background:#fff;color:var(--ink);cursor:pointer;white-space:nowrap;
+  }
+  .fchip i{width:8px;height:8px;border-radius:99px;font-style:normal}
+  .fchip b{color:var(--ink-faint);font-weight:800}
+
+  .countline{
+    display:flex;align-items:center;gap:6px;padding:0 4px;margin-top:8px;
+    font-size:11.5px;font-weight:700;pointer-events:auto;
+  }
+  .countline span{color:var(--ink-soft)}
+  .countline button{
+    font:inherit;font-size:11.5px;font-weight:700;color:var(--azulejo);
+    background:none;border:0;padding:0;cursor:pointer;
+  }
+  .countline button[hidden]{display:none}
+
+  /* ── Filter sheet ── */
+  .scrim{
+    position:absolute;inset:0;z-index:690;background:rgba(20,32,46,.34);
+    opacity:0;transition:opacity .2s ease;
+  }
+  .scrim.open{opacity:1}
+  .scrim[hidden]{display:none}
+  .sheet.filters{
+    display:flex;flex-direction:column;max-height:88%;
+    padding:14px 0 0;z-index:700;
+  }
+  .sheet.filters[hidden]{display:none}
+  .fhead{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 18px 12px;border-bottom:1px solid var(--line-soft);
+  }
+  .fhead h2{font-size:20px;letter-spacing:-.03em}
+  .fhead button{
+    font:inherit;font-size:12.5px;font-weight:700;color:var(--azulejo);
+    background:none;border:0;padding:0;cursor:pointer;
+  }
+  .fbody{
+    display:flex;flex-direction:column;gap:20px;padding:16px 18px 18px;
+    overflow-y:auto;-webkit-overflow-scrolling:touch;
+  }
+  .fgroup{display:flex;flex-direction:column;gap:9px}
+  .flabel{display:flex;align-items:baseline;justify-content:space-between}
+  .flabel span:first-child{
+    font-size:11px;font-weight:800;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--ink-soft);
+  }
+  .flabel span+span{font-size:11px;font-weight:700;color:var(--ink-faint)}
+  .fhint{margin:0;font-size:11.5px;font-weight:600;color:var(--ink-soft)}
+  .fhint[hidden]{display:none}
+
+  .checklist{
+    display:flex;flex-direction:column;border:1px solid var(--line-soft);
+    border-radius:14px;overflow:hidden;
+  }
+  .checklist button{
+    display:flex;align-items:center;gap:10px;padding:12px 13px;font:inherit;
+    background:#fff;border:0;border-top:1px solid var(--line-soft);
+    color:var(--ink);cursor:pointer;text-align:left;
+  }
+  .checklist button:first-child{border-top:0}
+  .checklist button[aria-pressed="true"]{background:rgba(18,160,95,.07)}
+  .checklist u{
+    display:grid;place-items:center;width:19px;height:19px;border-radius:6px;
+    border:1.5px solid var(--line);text-decoration:none;font-size:12px;
+    font-weight:800;color:#fff;flex:none;
+  }
+  .checklist button[aria-pressed="true"] u{background:var(--ok);border-color:var(--ok)}
+  .checklist i{width:9px;height:9px;border-radius:99px;font-style:normal;flex:none}
+  .checklist span{flex:1;font-size:14px;font-weight:600}
+  .checklist button[aria-pressed="true"] span{font-weight:700}
+  .checklist b{font-size:13px;font-weight:700;color:var(--ink-soft)}
+
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chips button{
+    display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:13px;
+    font-weight:600;padding:9px 13px;border-radius:99px;border:1px solid var(--line);
     background:#fff;color:var(--ink);cursor:pointer;
   }
-  .chains button[aria-pressed="true"]{background:var(--azulejo);border-color:var(--azulejo);color:#fff}
+  .chips button em{font-style:normal;font-weight:700;color:var(--ink-faint)}
+  .chips button[aria-pressed="true"]{
+    background:var(--ink);border-color:var(--ink);color:var(--paper);font-weight:700;
+  }
+  .chips button[aria-pressed="true"] em{color:#8FA0BB}
+  .chips button.more{
+    background:var(--paper);border-color:transparent;color:var(--azulejo);font-weight:700;
+  }
 
-  .tally{
-    display:flex;gap:6px;margin-top:8px;pointer-events:auto;font-size:11px;font-weight:700;
-    overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
+  .segmented{
+    display:flex;gap:2px;padding:3px;border-radius:13px;
+    background:var(--paper);border:1px solid var(--line-soft);
   }
-  .tally::-webkit-scrollbar{display:none}
+  .segmented button{
+    flex:1;font:inherit;font-size:13px;font-weight:600;padding:9px 0;border:0;
+    border-radius:10px;background:none;color:var(--ink-soft);cursor:pointer;
+  }
+  .segmented button[aria-pressed="true"]{
+    background:#fff;color:var(--ink);font-weight:700;
+    box-shadow:0 1px 3px rgba(20,32,46,.14);
+  }
 
-  /* Scroll affordance for .chains and .tally: a soft fade at whichever edge
-     still has chips off-screen, so overflow is never silent. Pure CSS —
-     mask-image driven by a scroll-linked animation, gated behind @supports
-     so a browser that can't evaluate scroll position this way just shows
-     the row unmasked (fully legible, no affordance) instead of a stuck or
-     wrong one. The mask trims the row's own rendered pixels (chips
-     included, not just its background) to transparent, so the last chip
-     visibly dissolves into the paper the topbar already sits on — no new
-     colour, no element that could catch a tap. */
-  @supports (animation-timeline: scroll()) {
-    @keyframes centimo-edge-fade{
-      0%{
-        mask-image:linear-gradient(to right,transparent 0,black 0,black calc(100% - 22px),transparent 100%);
-        -webkit-mask-image:linear-gradient(to right,transparent 0,black 0,black calc(100% - 22px),transparent 100%);
-      }
-      4%,96%{
-        mask-image:linear-gradient(to right,transparent 0,black 22px,black calc(100% - 22px),transparent 100%);
-        -webkit-mask-image:linear-gradient(to right,transparent 0,black 22px,black calc(100% - 22px),transparent 100%);
-      }
-      100%{
-        mask-image:linear-gradient(to right,transparent 0,black 22px,black 100%,transparent 100%);
-        -webkit-mask-image:linear-gradient(to right,transparent 0,black 22px,black 100%,transparent 100%);
-      }
-    }
-    .chains,.tally{
-      animation-name:centimo-edge-fade;
-      animation-timing-function:linear;
-      animation-fill-mode:both;
-      animation-timeline:scroll(self inline);
-    }
+  .ffoot{
+    padding:12px 18px calc(env(safe-area-inset-bottom) + 18px);
+    border-top:1px solid var(--line-soft);background:#fff;
   }
-  .tally button{
-    flex:none;display:inline-flex;align-items:center;gap:5px;font:inherit;font-size:11px;font-weight:700;
-    min-height:44px;background:#fff;border:1px solid var(--line);border-radius:99px;
-    padding:4px 11px;color:var(--ink);cursor:pointer;white-space:nowrap;
+  .ffoot .go{
+    width:100%;font:inherit;font-size:14.5px;font-weight:700;padding:14px;
+    border:0;border-radius:14px;background:var(--ink);color:var(--paper);cursor:pointer;
   }
-  .tally button[aria-pressed="false"]{opacity:.45}
-  .tally i{width:7px;height:7px;border-radius:99px;font-style:normal}
 
   .search{position:relative;margin-top:9px;pointer-events:auto}
   .search input{
@@ -295,16 +373,50 @@
     </svg>
     <h1>VoltaCheck</h1>
     <span class="mode" id="mode">a ligar…</span>
-    <button type="button" class="filterbadge" id="filterbadge" hidden>Filtros ativos · limpar</button>
   </div>
   <div class="search">
     <input id="q" type="search" autocomplete="off" autocapitalize="off" spellcheck="false"
            placeholder="Procurar por concelho" aria-label="Procurar máquinas por concelho">
     <div class="results" id="results"></div>
   </div>
-  <div class="chains" id="chains"></div>
-  <div class="tally" id="tally"></div>
+  <div class="filterbar" id="filterbar">
+    <button type="button" class="filterbtn" id="filterbtn" aria-haspopup="dialog" aria-expanded="false">
+      <i aria-hidden="true"><b></b><b></b><b></b></i>Filtros<em id="filtercount" hidden>0</em>
+    </button>
+  </div>
+  <div class="countline">
+    <span id="count">—</span>
+    <button type="button" id="clear" hidden>Limpar filtros</button>
+  </div>
 </header>
+
+<div class="scrim" id="scrim" hidden></div>
+
+<section class="sheet filters" id="filters" aria-label="Filtros" role="dialog" aria-modal="true" hidden>
+  <div class="grip"></div>
+  <div class="fhead">
+    <h2>Filtros</h2>
+    <button type="button" id="filters-clear">Limpar</button>
+  </div>
+  <div class="fbody">
+    <div class="fgroup">
+      <div class="flabel"><span>Estado</span><span id="status-of">4 de 4</span></div>
+      <div class="checklist" id="statuslist"></div>
+    </div>
+    <div class="fgroup">
+      <div class="flabel"><span>Cadeia</span></div>
+      <div class="chips" id="chains"></div>
+    </div>
+    <div class="fgroup">
+      <div class="flabel"><span>Distância</span></div>
+      <div class="segmented" id="radius"></div>
+      <p class="fhint" id="radius-hint" hidden>Precisamos da tua localização para filtrar por distância.</p>
+    </div>
+  </div>
+  <div class="ffoot">
+    <button type="button" class="go" id="filters-apply">Ver máquinas</button>
+  </div>
+</section>
 
 <div class="empty" id="empty" hidden>
   <p>Nenhuma máquina com este filtro.</p>

@@ -97,97 +97,295 @@ export function closeSheet(){
 // was showing, same as the chain chips always did), and refresh the two
 // "a filter is doing something" indicators.
 
-var chainsEl = document.getElementById("chains");
-var tallyEl = document.getElementById("tally");
-var emptyEl = document.getElementById("empty");
-var filterBadge = document.getElementById("filterbadge");
+var chainsEl    = document.getElementById("chains");
+var statusListEl= document.getElementById("statuslist");
+var radiusEl    = document.getElementById("radius");
+var radiusHint  = document.getElementById("radius-hint");
+var emptyEl     = document.getElementById("empty");
+var filterBar   = document.getElementById("filterbar");
+var filterBtn   = document.getElementById("filterbtn");
+var filterCount = document.getElementById("filtercount");
+var filtersEl   = document.getElementById("filters");
+var scrimEl     = document.getElementById("scrim");
+var countEl     = document.getElementById("count");
+var clearEl     = document.getElementById("clear");
+var statusOfEl  = document.getElementById("status-of");
 
 var STATUS_KEYS = ["ok", "full", "down", "stale"];
-// The tally's own established wording (plural, lowercase) — kept distinct
-// from LABEL, which is singular and capitalised for one machine's status in
-// the sheet ("Cheia"), not a count of many ("12 cheias"). LABEL and COLOR
-// are still reused directly: COLOR for every dot, LABEL for each toggle's
-// accessible name.
-var TALLY_WORD = { ok:"a funcionar", full:"cheias", down:"avariadas", stale:"sem dados" };
+
+// Plural, lowercase — a count of many, not one machine's state. LABEL stays
+// singular and capitalised for the sheet ("Cheia"), and both are still used:
+// LABEL for accessible names, COLOR for every dot.
+var STATUS_WORD = { ok:"A funcionar", full:"Cheias", down:"Avariadas", stale:"Sem dados há 18 h" };
+
+// How many chains to show before "+ N cadeias". Eleven chips is a wall;
+// four covers the large majority of machines and the rest are one tap away.
+var CHAINS_SHOWN = 4;
+var chainsExpanded = false;
+
+var RADII = [
+  { label:"1 km",  metres:1000 },
+  { label:"5 km",  metres:5000 },
+  { label:"25 km", metres:25000 },
+  { label:"Todas", metres:null },
+];
 
 function isFiltering(){
-  return store.activeChain !== null || store.activeStatuses.length < STATUS_KEYS.length;
+  return store.activeChain !== null
+      || store.activeStatuses.length < STATUS_KEYS.length
+      || store.activeRadius !== null;
 }
 
-// The empty-state message and the "a filter is active" badge both key off
-// the *nationwide* filtered count, not what happens to be on screen — a
-// filter that matches machines just outside the current viewport isn't a
-// dead end, it's just a pan away.
+function activeFilterCount(){
+  var n = 0;
+  if(store.activeChain !== null) n++;
+  if(store.activeStatuses.length < STATUS_KEYS.length) n++;
+  if(store.activeRadius !== null) n++;
+  return n;
+}
+
+/* ───────── barra de filtros ───────── */
+
+// One chip per active filter, each removing just that filter. Undoing is the
+// commonest thing done to a filter and shouldn't need the sheet reopened.
+function buildFilterBar(){
+  Array.prototype.slice.call(filterBar.querySelectorAll(".fchip"))
+    .forEach(function(el){ el.remove(); });
+
+  function chip(text, colour, onRemove){
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "fchip";
+    if(colour){
+      var dot = document.createElement("i");
+      dot.style.background = colour;
+      b.appendChild(dot);
+    }
+    b.appendChild(document.createTextNode(text));
+    var x = document.createElement("b");
+    x.textContent = "×";
+    b.appendChild(x);
+    b.setAttribute("aria-label", "Remover filtro: " + text);
+    b.addEventListener("click", function(){ onRemove(); afterFilterChange(); });
+    filterBar.appendChild(b);
+  }
+
+  // Statuses chip individually, so turning one back on is one tap.
+  if(store.activeStatuses.length < STATUS_KEYS.length){
+    store.activeStatuses.forEach(function(k){
+      chip(STATUS_WORD[k], COLOR[k], function(){
+        store.setActiveStatuses(store.activeStatuses.filter(function(s){ return s !== k; }));
+        // Removing the last one means "no status filter", not "empty map".
+        if(!store.activeStatuses.length) store.setActiveStatuses(STATUS_KEYS.slice());
+      });
+    });
+  }
+  if(store.activeChain !== null){
+    chip(store.activeChain, null, function(){ store.setActiveChain(null); });
+  }
+  if(store.activeRadius !== null){
+    var r = RADII.filter(function(x){ return x.metres === store.activeRadius; })[0];
+    chip(r ? r.label : "Distância", null, function(){ store.setActiveRadius(null); });
+  }
+
+  var n = activeFilterCount();
+  filterCount.textContent = n;
+  filterCount.hidden = n === 0;
+}
+
+// The count and the empty state both key off the *nationwide* filtered
+// total, not what's on screen — a filter matching machines just outside the
+// viewport isn't a dead end, it's a pan away.
 function updateFilterState(){
-  emptyEl.hidden = filtered(Date.now()).length > 0;
-  filterBadge.hidden = !isFiltering();
+  var n = filtered(Date.now()).length;
+  emptyEl.hidden = n > 0;
+  countEl.textContent = n === 1 ? "1 máquina neste mapa" : n + " máquinas neste mapa";
+  clearEl.hidden = !isFiltering();
+  var applyBtn = document.getElementById("filters-apply");
+  if(applyBtn) applyBtn.textContent = n === 1 ? "Ver 1 máquina" : "Ver " + n + " máquinas";
 }
 
 function afterFilterChange(){
-  buildTally();
+  buildStatusList();
+  buildChainChips();
+  buildRadius();
+  buildFilterBar();
   updateFilterState();
-  closeSheet(); // matches what the chain chips already did before this existed
+  closeSheet();
+  draw();
 }
 
 export function resetFilters(){
   store.setActiveChain(null);
   store.setActiveStatuses(STATUS_KEYS.slice());
-  buildChainChips();
+  store.setActiveRadius(null);
+  chainsExpanded = false;
   afterFilterChange();
 }
 
-export function buildChainChips(){
-  chainsEl.textContent = "";
+/* ───────── estado ───────── */
 
-  function addChip(label, value){
+// Counts follow the *chain* filter but not the status filter: a count that
+// ignored an active chain would lie about what the toggle shows, while one
+// that followed the status filter would zero out every row you turned off.
+export function buildStatusList(){
+  var now = Date.now();
+  var counts = statusCounts(filterByChain(store.machines, store.activeChain), now);
+  statusListEl.textContent = "";
+
+  STATUS_KEYS.forEach(function(key){
+    var on = store.activeStatuses.indexOf(key) !== -1;
     var btn = document.createElement("button");
     btn.type = "button";
-    btn.textContent = label;
-    btn.setAttribute("aria-pressed", store.activeChain === value);
+    btn.setAttribute("aria-pressed", on);
+    btn.setAttribute("aria-label", LABEL[key]);
+
+    var box = document.createElement("u");
+    box.textContent = on ? "✓" : "";
+    var dot = document.createElement("i");
+    dot.style.background = COLOR[key];
+    var name = document.createElement("span");
+    name.textContent = STATUS_WORD[key];
+    var num = document.createElement("b");
+    num.textContent = counts[key];
+
+    btn.appendChild(box); btn.appendChild(dot);
+    btn.appendChild(name); btn.appendChild(num);
     btn.addEventListener("click", function(){
-      store.setActiveChain(store.activeChain === value ? null : value);
-      buildChainChips();
+      var cur = store.activeStatuses;
+      var next = cur.indexOf(key) !== -1
+        ? cur.filter(function(s){ return s !== key; })
+        : cur.concat([key]);
+      // All four off is indistinguishable from a blank map and no one means
+      // it; treat clearing the last one as clearing the filter.
+      store.setActiveStatuses(next.length ? next : STATUS_KEYS.slice());
+      afterFilterChange();
+    });
+    statusListEl.appendChild(btn);
+  });
+
+  statusOfEl.textContent = store.activeStatuses.length + " de " + STATUS_KEYS.length;
+}
+
+/* ───────── cadeia ───────── */
+
+export function buildChainChips(){
+  chainsEl.textContent = "";
+  var all = chainCounts(store.machines);
+  var shown = chainsExpanded ? all : all.slice(0, CHAINS_SHOWN);
+
+  // An active chain outside the collapsed slice must still be visible, or
+  // the sheet would show no chain selected while one plainly is.
+  if(store.activeChain !== null && !shown.some(function(c){ return c.chain === store.activeChain; })){
+    var hit = all.filter(function(c){ return c.chain === store.activeChain; })[0];
+    if(hit) shown = shown.concat([hit]);
+  }
+
+  shown.forEach(function(c){
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.setAttribute("aria-pressed", store.activeChain === c.chain);
+    btn.appendChild(document.createTextNode(c.chain));
+    var n = document.createElement("em");
+    n.textContent = c.count;
+    btn.appendChild(n);
+    btn.addEventListener("click", function(){
+      store.setActiveChain(store.activeChain === c.chain ? null : c.chain);
       afterFilterChange();
     });
     chainsEl.appendChild(btn);
-  }
-
-  addChip("Todas", null);
-  chainCounts(store.machines).forEach(function(c){ addChip(c.chain, c.chain); });
-}
-
-// Counts are for the *current chain filter*, not the national total — a
-// count that ignores an active chain would lie about what tapping the
-// toggle actually shows. They stay independent of the status filter itself,
-// so a toggle that's off still shows what turning it on would reveal.
-export function buildTally(){
-  var now = Date.now();
-  var counts = statusCounts(filterByChain(store.machines, store.activeChain), now);
-  tallyEl.textContent = "";
-
-  STATUS_KEYS.forEach(function(key){
-    var btn = document.createElement("button");
-    btn.type = "button";
-    btn.setAttribute("aria-pressed", store.activeStatuses.indexOf(key) !== -1);
-    btn.setAttribute("aria-label", LABEL[key]);
-
-    var dot = document.createElement("i");
-    dot.style.background = COLOR[key];
-
-    btn.appendChild(dot);
-    btn.appendChild(document.createTextNode(counts[key] + " " + TALLY_WORD[key]));
-    btn.addEventListener("click", function(){
-      var cur = store.activeStatuses;
-      store.setActiveStatuses(
-        cur.indexOf(key) !== -1 ? cur.filter(function(s){ return s !== key; }) : cur.concat([key])
-      );
-      afterFilterChange();
-    });
-
-    tallyEl.appendChild(btn);
   });
 
+  var rest = all.length - shown.length;
+  if(rest > 0 || chainsExpanded){
+    var more = document.createElement("button");
+    more.type = "button";
+    more.className = "more";
+    more.textContent = chainsExpanded ? "Ver menos" : "+ " + rest + (rest === 1 ? " cadeia" : " cadeias");
+    more.addEventListener("click", function(){
+      chainsExpanded = !chainsExpanded;
+      buildChainChips();
+    });
+    chainsEl.appendChild(more);
+  }
+}
+
+/* ───────── distância ───────── */
+
+export function buildRadius(){
+  radiusEl.textContent = "";
+  RADII.forEach(function(r){
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = r.label;
+    btn.setAttribute("aria-pressed", store.activeRadius === r.metres);
+    btn.addEventListener("click", function(){ pickRadius(r.metres); });
+    radiusEl.appendChild(btn);
+  });
+  radiusHint.hidden = !(store.activeRadius !== null && !store.userPos);
+}
+
+// Picking a distance is a deliberate tap, so it may ask for location the
+// same way the locate button does — the second and only other place in the
+// app that reaches for geolocation. "Todas" never asks: it needs no
+// position, and asking would be a prompt for nothing.
+function pickRadius(metres){
+  if(metres === null || store.userPos){
+    store.setActiveRadius(metres);
+    afterFilterChange();
+    return;
+  }
+  if(!navigator.geolocation){
+    toast("Localização indisponível neste dispositivo");
+    return;
+  }
+  toast("A procurar-te…");
+  navigator.geolocation.getCurrentPosition(
+    function(p){
+      store.setUserPos({ lat:p.coords.latitude, lng:p.coords.longitude });
+      store.setActiveRadius(metres);
+      afterFilterChange();
+      if(store.selected) select(store.selected);
+    },
+    function(){
+      // Apply it anyway. filterByDistance with no position returns
+      // everything, so the map stays honest instead of going blank, and the
+      // hint under the control says why the radius isn't biting.
+      store.setActiveRadius(metres);
+      afterFilterChange();
+      toast("Não consegui obter a localização");
+    },
+    { enableHighAccuracy:true, timeout:8000, maximumAge:60000 }
+  );
+}
+
+/* ───────── abrir e fechar o painel ───────── */
+
+export function openFilters(){
+  closeSheet();
+  buildStatusList();
+  buildChainChips();
+  buildRadius();
   updateFilterState();
+  filtersEl.hidden = false;
+  scrimEl.hidden = false;
+  requestAnimationFrame(function(){
+    filtersEl.classList.add("open");
+    scrimEl.classList.add("open");
+  });
+  filterBtn.setAttribute("aria-expanded", "true");
+}
+
+export function closeFilters(){
+  filtersEl.classList.remove("open");
+  scrimEl.classList.remove("open");
+  filterBtn.setAttribute("aria-expanded", "false");
+  setTimeout(function(){
+    if(!filtersEl.classList.contains("open")){
+      filtersEl.hidden = true;
+      scrimEl.hidden = true;
+    }
+  }, 240);
 }
 
 /* ───────── procura por concelho ───────── */
@@ -264,8 +462,21 @@ export function init(){
   map.on("click", closeSheet);
   map.on("moveend", draw);
 
-  filterBadge.addEventListener("click", resetFilters);
-  document.getElementById("empty-clear").addEventListener("click", resetFilters);
+  filterBtn.addEventListener("click", openFilters);
+  scrimEl.addEventListener("click", closeFilters);
+  document.getElementById("filters-apply").addEventListener("click", closeFilters);
+  document.getElementById("filters-clear").addEventListener("click", function(){
+    resetFilters();
+    updateFilterState();
+  });
+  clearEl.addEventListener("click", resetFilters);
+  document.getElementById("empty-clear").addEventListener("click", function(){
+    resetFilters();
+    closeFilters();
+  });
+  document.addEventListener("keydown", function(e){
+    if(e.key === "Escape" && !filtersEl.hidden) closeFilters();
+  });
 
   qInput.addEventListener("input", renderResults);
   qInput.addEventListener("focus", renderResults);
@@ -303,7 +514,9 @@ export function init(){
         m.reports = (m.reports || []).concat([{ s: btn.dataset.s, at: Date.now() }]);
         store.localSave();
         select(m.id);
-        buildTally();
+        buildStatusList();
+        buildFilterBar();
+        updateFilterState();
         toast(store.live ? "Obrigado — toda a gente vê isto agora" : "Guardado neste dispositivo");
       } else if(r === "cooldown"){
         toast("Já reportaste esta máquina há pouco. Volta daqui a uns minutos.");
@@ -320,4 +533,15 @@ export function init(){
       choiceBtns.forEach(function(b){ b.disabled = false; });
     });
   });
+}
+
+// Called whenever the machine list itself changes (first load, a refresh, a
+// locally added machine). One entry point so callers don't have to know
+// which pieces of the filter UI are derived from the data.
+export function refreshFilters(){
+  buildStatusList();
+  buildChainChips();
+  buildRadius();
+  buildFilterBar();
+  updateFilterState();
 }

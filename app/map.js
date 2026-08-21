@@ -6,7 +6,7 @@
 
 import { MAX_PINS, GLYPH } from './config.js';
 import * as store from './store.js';
-import { statusOf, filterByChain, filterByStatus, sortByDistance } from './domain.js';
+import { statusOf, filterByChain, filterByStatus, filterByDistance, sortByDistance } from './domain.js';
 
 export var map = L.map("map", { zoomControl:false }).setView([38.7380, -9.1450], 13);
 
@@ -36,7 +36,10 @@ function icon(m, now){
 // it has to be the nationwide count, not what happens to be on screen, or
 // panning to an empty corner of the map would look like the same dead end.
 export function filtered(now){
-  return filterByStatus(filterByChain(store.machines, store.activeChain), store.activeStatuses, now);
+  return filterByDistance(
+    filterByStatus(filterByChain(store.machines, store.activeChain), store.activeStatuses, now),
+    store.userPos, store.activeRadius
+  );
 }
 
 /* With ~2.400 máquinas on the map, one marker each is more DOM than a phone

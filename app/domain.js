@@ -206,3 +206,20 @@ export function knownTowns(machines){
   });
   return out.sort(function(a, b){ return norm(a) < norm(b) ? -1 : 1; });
 }
+
+/* ───────── filtro por distância ───────── */
+
+// Machines within `metres` of `from`. A null radius means "Todas" and
+// returns everything, as does a missing position — the filter cannot
+// answer "how far" without somewhere to measure from, and showing an empty
+// map would blame the user for not having tapped locate.
+//
+// Deliberately inclusive at the boundary: a machine at exactly 1000 m is
+// within 1 km. Half-open ranges are for buckets that must not overlap, and
+// these do not.
+export function filterByDistance(machines, from, metres){
+  if(metres == null || !from) return machines.slice();
+  return machines.filter(function(m){
+    return metresBetween(from.lat, from.lng, m.lat, m.lng) <= metres;
+  });
+}
