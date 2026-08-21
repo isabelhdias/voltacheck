@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { COLOR } from '../../app/config.js';
+import { COLOR, FADED, FADED_INK } from '../../app/config.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -26,4 +26,35 @@ test('COLOR matches the CSS custom properties it duplicates', () => {
       `COLOR.${key} is ${hex} but --${key} is ${m[1]} — the map and the sheet would disagree`,
     );
   }
+});
+
+// The faded pair added when decay stopped meaning grey. Same failure mode as
+// COLOR, one step subtler: a drift here makes an aged pin one shade on the
+// map and another in the sheet, which is exactly the kind of difference the
+// decay mechanic is read from.
+test('FADED and FADED_INK match the CSS custom properties they duplicate', () => {
+  const pairs = [
+    ['-faded', FADED],
+    ['-deep', FADED_INK],
+  ];
+
+  for (const [suffix, table] of pairs) {
+    for (const [key, hex] of Object.entries(table)) {
+      const m = html.match(new RegExp(`--${key}${suffix}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
+      assert.ok(m, `index.html has no --${key}${suffix} custom property`);
+      assert.equal(
+        hex.toUpperCase(),
+        m[1].toUpperCase(),
+        `${suffix === '-deep' ? 'FADED_INK' : 'FADED'}.${key} is ${hex} but --${key}${suffix} is ${m[1]}`,
+      );
+    }
+  }
+});
+
+// Grey is now what "nobody has ever reported this" looks like, and nothing
+// else. There is deliberately no --stale-faded: a machine with no report has
+// no hue to wash out, so the fade tables cover only the three real statuses.
+test('the fade tables cover the three reported statuses and not stale', () => {
+  assert.deepEqual(Object.keys(FADED).sort(), ['down', 'full', 'ok']);
+  assert.deepEqual(Object.keys(FADED_INK).sort(), ['down', 'full', 'ok']);
 });

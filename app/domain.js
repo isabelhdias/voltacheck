@@ -22,6 +22,29 @@ export function statusOf(machine, now){
   return (now - r.at) > STALE_AFTER ? "stale" : r.s;
 }
 
+// What to paint, split from what to *filter* by.
+//
+// statusOf() collapses an aged report to "stale", which is right for the
+// filters and the counts — "Cheias" must mean machines someone confirmed
+// were full, not ones that were full two days ago. But painting that as
+// grey threw away the only thing anybody knew about the machine, and read
+// as harsher than the truth.
+//
+// So painting asks a different question: which hue, and is it still
+// current? `tone` is the last reported status (green/amber/red), `faded`
+// says the report is older than STALE_AFTER and must be drawn washed out —
+// never at full strength, because that is the whole mechanic. A machine
+// with no reports at all has no hue to fade: it stays "stale" grey.
+//
+// The timestamp the sheet stamps beside this comes from latest(machine).at —
+// there is no separate accessor for it, because latest() is what the caller
+// already needs for the reconfirm prompt.
+export function paintOf(machine, now){
+  var r = latest(machine);
+  if(!r) return { tone:"stale", faded:false };
+  return { tone:r.s, faded:(now - r.at) > STALE_AFTER };
+}
+
 // The sheet prompt switches from "Estiveste lá agora?" to "Ainda está
 // assim?" once the latest report is old enough to invite reconfirmation.
 export function needsReconfirm(report, now){

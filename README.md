@@ -3,7 +3,7 @@
 A community map of the deposit-return machines in Portuguese supermarkets —
 which ones are working, which are full, which are broken. 2 444 machines
 across the mainland, Madeira and the Azores. Anyone can say what they just
-saw, and every report fades to grey after 18 hours, so the map can't quietly
+saw, and every report visibly fades after 18 hours, so the map can't quietly
 go stale.
 
 **Live at [isabelhdias.github.io/voltacheck](https://isabelhdias.github.io/voltacheck/)**
@@ -16,8 +16,8 @@ go stale.
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/map.jpg" alt="Map of central Lisbon with green, amber, red and grey machine pins"></td>
-    <td width="50%"><img src="docs/images/sheet.jpg" alt="Bottom sheet for a Pingo Doce machine: full, 4 hours ago, asking &quot;Ainda está assim?&quot;"></td>
+    <td width="50%"><img src="docs/images/map.jpg" alt="Map of central Lisbon with green, amber and red machine pins, some solid and some hollow, and grey pins for machines nobody has reported"></td>
+    <td width="50%"><img src="docs/images/sheet.jpg" alt="Bottom sheet for a Pingo Doce machine: full, 4 hours ago, timestamped &quot;Último report: 21/08, 11:05&quot;, asking &quot;Ainda está assim?&quot;"></td>
   </tr>
   <tr>
     <td><b>The map.</b> One pin per machine, coloured by its last report. Grey means nobody has said anything recently.</td>
@@ -51,12 +51,25 @@ still true, so the app puts a clock on every report:
 
 | Age of the last report | What you see |
 |---|---|
-| under 3 h | the colour, and *"Estiveste lá agora?"* |
-| 3 h – 18 h | the colour, and *"Ainda está assim?"* — an invitation to reconfirm |
-| over 18 h | grey, *"Sem dados recentes"* |
+| under 3 h | the colour, solid, and *"Estiveste lá agora?"* |
+| 3 h – 18 h | the colour, solid, and *"Ainda está assim?"* — an invitation to reconfirm |
+| over 18 h | the same colour, **hollow** — pale fill, coloured ring — and *"sem dados recentes"* beside the timestamp |
+| never reported | grey |
+
+Under every one of those, the sheet says exactly when the last report was
+filed: *"Último report: 20/08, 08:06"*.
+
+An aged report used to drop to grey, which was harsher than the truth — the
+app knew what the machine last was and threw it away. It now keeps the
+colour and takes the weight out of it, so you can tell "full yesterday" from
+"nobody has ever checked". What that fade must never do is pass for a fresh
+report, so it changes the picture only: an aged machine is still counted and
+filtered as *no recent data*, never as its old status, and the sheet offers
+it no pre-ticked answer to agree with.
 
 Nothing in the app is allowed to make an old report look fresh. Both
-thresholds live in `app/config.js`; the logic is `app/domain.js`.
+thresholds live in `app/config.js`; the logic is `app/domain.js` —
+`statusOf()` for what a machine counts as, `paintOf()` for how it's drawn.
 
 ## How it's built
 

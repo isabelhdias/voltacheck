@@ -1,10 +1,10 @@
 // The bottom sheet, town search, chain filter chips, status filter chips,
 // and toast.
 
-import { LABEL, COLOR } from './config.js';
+import { LABEL, COLOR, FADED, FADED_INK } from './config.js';
 import * as store from './store.js';
 import {
-  statusOf, latest, needsReconfirm, ago, townsMatching, chainCounts,
+  paintOf, latest, needsReconfirm, ago, townsMatching, chainCounts,
   filterByChain, statusCounts, metresBetween, formatDistance,
 } from './domain.js';
 import { map, draw, filtered } from './map.js';
@@ -20,13 +20,29 @@ export function sheetHeight(){
   );
 }
 
+// The absolute time of a report, pt-PT and short: "20/08, 14:32", with the
+// year added only when it isn't the current one. `ago()` is what you read at
+// a glance; this is what you check when the answer actually matters — and
+// it's the thing a decayed machine used to stop telling you altogether.
+//
+// Intl lives here rather than in domain.js because it is locale- and
+// timezone-dependent, and domain.js has to stay deterministic for the
+// vectors (a Swift/Kotlin port will use its own platform formatter here).
+function stampAt(ts, now){
+  var d = new Date(ts);
+  var opts = { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" };
+  if(d.getFullYear() !== new Date(now).getFullYear()) opts.year = "numeric";
+  try { return new Intl.DateTimeFormat("pt-PT", opts).format(d); }
+  catch(e){ return d.toLocaleString(); }
+}
+
 export function select(id){
   store.setSelected(id);
   var m = store.find(id);
   if(!m) return;
 
   var now = Date.now();
-  var s = statusOf(m, now), r = latest(m);
+  var p = paintOf(m, now), r = latest(m);
 
   document.getElementById("s-name").textContent = m.name;
 
@@ -34,28 +50,47 @@ export function select(id){
   if(store.userPos) addr.push(formatDistance(metresBetween(store.userPos.lat, store.userPos.lng, m.lat, m.lng)));
   document.getElementById("s-addr").textContent = addr.join(" · ");
 
+  // The pill says what was reported and how long ago — now including
+  // reports that have aged past STALE_AFTER, which used to collapse to a
+  // bare "Sem dados recentes" that threw away both. A faded machine gets
+  // the washed-out fill and the dark-hue text instead, so it still cannot
+  // be mistaken for a current report.
   var st = document.getElementById("s-state");
-  st.textContent = LABEL[s] + (r && s !== "stale" ? " · " + ago(r.at, now) : "");
-  st.style.background = COLOR[s];
+  st.textContent = LABEL[p.tone] + (r ? " · " + ago(r.at, now) : "");
+  st.style.background = p.faded ? FADED[p.tone] : COLOR[p.tone];
+  st.style.color      = p.faded ? FADED_INK[p.tone] : "#fff";
+  st.style.boxShadow  = p.faded ? "inset 0 0 0 1.5px " + COLOR[p.tone] : "none";
+  if(p.faded) st.dataset.faded = "1"; else delete st.dataset.faded;
 
+  // The timestamp itself, absolute, whenever there is one to show. When the
+  // report has aged out, "sem dados recentes" is spelled out beside it in
+  // stale grey — the faded pill must never be the only thing saying so.
+  var stamp = document.getElementById("s-stamp");
+  stamp.textContent = r ? "Último report: " + stampAt(r.at, now) : "";
+  if(r && p.faded){
+    stamp.appendChild(document.createTextNode(" · "));
+    var warn = document.createElement("b");
+    warn.textContent = "sem dados recentes";
+    stamp.appendChild(warn);
+  }
+  stamp.hidden = !r;
+
+  // Same rule as before the fade landed: reconfirmation is only offered for
+  // a report that is still current (3 h–18 h old). `!p.faded` with a report
+  // present is exactly `statusOf(...) !== "stale"` — see the composed
+  // prompt rule in docs/domain-contract.md.
   document.getElementById("s-ask").textContent =
-    (r && s !== "stale" && needsReconfirm(r, now))
+    (r && !p.faded && needsReconfirm(r, now))
       ? "Ainda está assim?"
       : "Estiveste lá agora?";
 
   // Mark the choice that matches the machine's current state, so
-  // "Ainda está assim?" has a visibly obvious answer to confirm. A stale
-  // machine has no current state to mark — which is the point of stale.
+  // "Ainda está assim?" has a visibly obvious answer to confirm. Nothing is
+  // marked once the report has aged out: a faded state is not a current one
+  // to agree with, and pre-ticking it would be the app nodding along to
+  // something it no longer knows.
   Array.prototype.forEach.call(document.querySelectorAll(".choice"), function(b){
-    if(s !== "stale" && b.dataset.s === s) b.dataset.cur = "1";
-    else delete b.dataset.cur;
-  });
-
-  // Mark the choice matching the machine's current state, so
-  // "Ainda está assim?" has a visibly obvious answer to confirm. A stale
-  // machine has no current state to mark — which is the point of stale.
-  Array.prototype.forEach.call(document.querySelectorAll(".choice"), function(b){
-    if(s !== "stale" && b.dataset.s === s) b.dataset.cur = "1";
+    if(!p.faded && p.tone !== "stale" && b.dataset.s === p.tone) b.dataset.cur = "1";
     else delete b.dataset.cur;
   });
 
@@ -63,7 +98,8 @@ export function select(id){
   log.innerHTML = (!m.reports || !m.reports.length)
     ? "<p>Ainda ninguém reportou esta máquina.</p>"
     : m.reports.slice(-6).reverse().map(function(x){
-        return "<p><em>" + LABEL[x.s] + "</em><span>" + ago(x.at, now) + "</span></p>";
+        return '<p title="' + stampAt(x.at, now) + '"><em>' + LABEL[x.s] +
+               "</em><span>" + ago(x.at, now) + "</span></p>";
       }).join("");
 
   sheet.classList.add("open");

@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   statusOf,
+  paintOf,
   filterByDistance,
   suggestTown,
   knownTowns,
@@ -55,6 +56,10 @@ test('vector constants match app/config.js', () => {
 
   assert.equal(ago_.constants.hourMs, HOUR);
   assert.equal(ago_.constants.dayMs, 24 * HOUR);
+
+  const paint = loadVector('paint.json');
+  assert.equal(paint.constants.staleAfterMs, STALE_AFTER);
+  assert.equal(paint.constants.hourMs, HOUR);
 });
 
 /* ───────── status.json ───────── */
@@ -257,5 +262,45 @@ test('filterByDistance — inside the radius; everything when there is no radius
   for (const c of filterByDistanceCases) {
     const got = filterByDistance(c.machines, c.from, c.metres).map((m) => m.id);
     assert.deepEqual(got, c.expectedIds, `${c.id}: ${c.description ?? ''}`);
+  }
+});
+
+/* ───────── paint.json ───────── */
+
+test('paintOf — an aged report fades, it does not go grey', () => {
+  const { paintCases } = loadVector('paint.json');
+  assert.ok(paintCases.length > 0, 'vector file has no cases');
+
+  for (const c of paintCases) {
+    const machine = { reports: c.reports };
+    const got = paintOf(machine, c.now);
+    assert.equal(got.tone, c.expectedTone, `${c.id} (tone): ${c.description}`);
+    assert.equal(got.faded, c.expectedFaded, `${c.id} (faded): ${c.description}`);
+    const r = latest(machine);
+    assert.equal(
+      r ? r.at : null,
+      c.expectedLatestAt,
+      `${c.id} (latest report timestamp): ${c.description}`,
+    );
+  }
+});
+
+// The two must never disagree about one machine: whatever paintOf calls
+// faded is exactly what statusOf calls stale, minus the never-reported case
+// that has no colour to fade in the first place. Asserted here rather than
+// in the vectors because it is a relationship between two functions, and it
+// is the thing that would let a filter and a pin tell different stories.
+test('paintOf.faded and statusOf agree on the threshold', () => {
+  const { paintCases } = loadVector('paint.json');
+
+  for (const c of paintCases) {
+    const machine = { reports: c.reports };
+    const stale = statusOf(machine, c.now) === 'stale';
+    const hasReport = latest(machine) !== null;
+    assert.equal(
+      paintOf(machine, c.now).faded,
+      stale && hasReport,
+      `${c.id}: paintOf and statusOf disagree about whether this report has aged out`,
+    );
   }
 });

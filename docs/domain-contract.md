@@ -14,12 +14,19 @@ about when a report goes stale, the app lies to someone.
   in any language.
 - **Deterministic.** Same inputs, same output, always. No randomness, no
   locale-dependent formatting beyond the fixed pt-PT strings baked in.
-- **Small surface.** `statusOf`, `needsReconfirm`, `ago`, `norm`,
+- **Small surface.** `statusOf`, `paintOf`, `needsReconfirm`, `ago`, `norm`,
   `groupTowns`, `townsMatching`, `filterByChain`, `chainCounts`, `latest`,
   `metresBetween`, `formatDistance`, `sortByDistance`, `filterByStatus`,
-  `statusCounts`. A port only needs to match these fourteen functions and
-  the two thresholds they read from `app/config.js`: `STALE_AFTER` (18h) and
+  `statusCounts`. A port only needs to match these fifteen functions and the
+  two thresholds they read from `app/config.js`: `STALE_AFTER` (18h) and
   `RECONFIRM_AFTER` (3h).
+
+Formatting an *absolute* timestamp is deliberately not in that list. The
+sheet shows one beside `ago()`'s relative string ("Último report: 20/08,
+08:06"), but it is locale- and timezone-dependent, so `app/ui.js` builds it
+with `Intl` and a port should use its own platform formatter. The instant
+itself is just `latest(machine).at`; there is no accessor for it, because a
+caller that wants the timestamp already needs the report for the prompt.
 
 ## The vectors are the contract, not the JS test
 
@@ -34,6 +41,7 @@ Files:
 | File | Covers |
 |---|---|
 | `status.json` | `statusOf` — the 18h decay, including both sides of the boundary |
+| `paint.json` | `paintOf` — which colour an aged report keeps, the `faded` flag that says it must be drawn washed out, and which report's timestamp the sheet stamps |
 | `reconfirm.json` | `needsReconfirm` in isolation, and the composed sheet-prompt rule below |
 | `ago.json` | `ago` — pt-PT relative time strings, the minute/hour/day boundaries, the 1-min floor |
 | `search.json` | `norm` (accent/case folding) and `townsMatching` (ranking, the 8-result cap, empty input) |
@@ -70,7 +78,9 @@ rather than needing to be recomputed.
 ### The one composed rule: the sheet prompt
 
 `domain.js` does not export a single "what prompt do I show" function — the
-prompt is assembled in `app/ui.js` from two independent domain calls:
+prompt is assembled in `app/ui.js` from two independent domain calls
+(`app/ui.js` writes the staleness half as `!paintOf(...).faded`, which for a
+machine that has a report is the same test):
 
 ```
 prompt = (report != null && statusOf(machine, now) != "stale" && needsReconfirm(report, now))
@@ -87,6 +97,32 @@ report from being asked to "reconfirm" a status nobody can currently see.
 with the formula spelled out in the file's own `"promptFormula"` field. A
 Swift/Kotlin port needs to replicate the *composition*, not just the two
 functions separately.
+
+## Status and paint are one threshold, two questions
+
+`statusOf` and `paintOf` must never disagree about a machine, and the split
+between them is the decay mechanic as it stands:
+
+| | `statusOf(m, now)` | `paintOf(m, now)` |
+|---|---|---|
+| fresh report | its own status | `{ tone: <status>, faded: false }` |
+| report older than `STALE_AFTER` | `"stale"` | `{ tone: <status>, faded: true }` |
+| no reports at all | `"stale"` | `{ tone: "stale", faded: false }` |
+
+`statusOf` is what a machine *counts as*: it drives `filterByStatus`,
+`statusCounts` and every filter chip, so a report that has aged out is filed
+under "no recent data" and never under the status it used to have.
+`paintOf` is only how it is *drawn*: an aged report keeps its hue and is
+rendered hollow — pale fill, coloured ring — rather than dropping to grey,
+which threw away the last thing anyone knew about the machine.
+
+Both use `> STALE_AFTER`, never `>=`, so a report exactly 18h old is current
+on both sides. `paint.json` pins the boundary from the painting side, and
+`test/unit/domain.test.js` additionally asserts the relationship itself:
+`paintOf(...).faded` is true on exactly the inputs where `statusOf(...)` is
+`"stale"` **and** a report exists. A port that reimplements the two
+independently should assert that same equivalence — it is what stops a pin
+and a filter from telling one person two different stories.
 
 ## How a Swift/Kotlin port should consume this
 

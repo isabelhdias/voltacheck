@@ -64,17 +64,25 @@ async function fetchCached(url) {
 }
 
 // One report per machine, chosen from its OSM id so the map looks the same on
-// every run. Roughly a quarter of the machines are left with no report at all,
-// which is what the grey pins are.
+// every run. Three kinds of pin have to appear, because all three are real:
+// solid ones (a report inside 18 h), hollow ones (a report past 18 h, which
+// keeps its colour instead of going grey), and grey ones — about an eighth of
+// the machines, left with no report at all, which is now the only thing grey
+// means.
 function demoReports(now) {
   const reports = {};
   SEED.forEach((s) => {
     const h = Number(String(s[5]).slice(-4)) % 100;
     let state, ageH;
-    if (h < 38)      { state = 'ok';   ageH = 0.2 + (h % 9) * 0.3; }
-    else if (h < 52) { state = 'ok';   ageH = 5 + (h % 7); }
-    else if (h < 64) { state = 'full'; ageH = 1 + (h % 5) * 0.8; }
-    else if (h < 74) { state = 'down'; ageH = 0.5 + (h % 6); }
+    if (h < 34)      { state = 'ok';   ageH = 0.2 + (h % 9) * 0.3; }
+    else if (h < 46) { state = 'ok';   ageH = 5 + (h % 7); }
+    else if (h < 58) { state = 'full'; ageH = 1 + (h % 5) * 0.8; }
+    else if (h < 68) { state = 'down'; ageH = 0.5 + (h % 6); }
+    // Past STALE_AFTER: drawn faded, one of each colour so the screenshot
+    // shows what an aged report looks like rather than only fresh ones.
+    else if (h < 76) { state = 'ok';   ageH = 21 + (h % 5) * 6; }
+    else if (h < 83) { state = 'full'; ageH = 19 + (h % 4) * 9; }
+    else if (h < 88) { state = 'down'; ageH = 26 + (h % 3) * 11; }
     else return;
     reports['osm-' + s[5]] = [{ s: state, at: Math.round(now - ageH * HOUR) }];
   });
