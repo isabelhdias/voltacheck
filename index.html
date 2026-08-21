@@ -45,46 +45,6 @@
   .leaflet-container{font-family:inherit}
   .leaflet-control-attribution{font-size:9px;background:rgba(244,242,236,.82)}
 
-  /* ── Warm the basemap to match the app ──────────────────────────────
-     OpenStreetMap's standard tiles are brighter and cooler than the rest
-     of VoltaCheck, so the map reads as a different product with pins on
-     it. This tints it toward --paper without touching anything else.
-
-     Two parts, and the split matters:
-
-     1. A filter on the TILE PANE only. Slightly desaturated and a touch
-        brighter.
-     2. A multiply tint over the tiles. Multiply scales each channel
-        instead of rotating hue, which is why it is used here rather than
-        the obvious sepia(): sepia flattens water into the land colour.
-        Measured against real tiles, a sepia chain strong enough to warm
-        the land pushed water from +62 to −27 on "how much bluer than the
-        land it is" — i.e. the Tagus came out warmer than its own banks,
-        reading as sand. Multiply at these values keeps it at +12, and
-        keeps roads lighter than land (+13 luminance) instead of
-        collapsing that contrast to +1.
-
-     The values were tuned by sampling a real Lisbon tile and comparing
-     each feature class against design/VoltaCheck.dc.html: land lands
-     within 6 of #E8E6DE and roads within 2 of #F4F2EC.
-
-     Water is the honest limit. The design wants a light blue and this
-     gets a muted grey-blue, because a single transform cannot tint one
-     feature without tinting the rest. Fixing that properly means vector
-     tiles and a real style; see docs/map-style.md.
-
-     z-index 250 puts the tint above Leaflet's tile pane (200) and below
-     its overlay (400) and marker (600) panes, so PINS ARE NEVER TINTED.
-     That is deliberate rather than incidental: the status colours carry
-     the decay mechanic, and a machine's green must not drift toward a
-     stale grey because of a map treatment. isolation:isolate keeps the
-     blend inside the map instead of reaching the page behind it. */
-  #map{isolation:isolate}
-  .leaflet-tile-pane{filter:saturate(.85) brightness(1.04)}
-  #map::after{
-    content:"";position:absolute;inset:0;z-index:250;pointer-events:none;
-    background:#E8E6DE;opacity:.5;mix-blend-mode:multiply;
-  }
 
   .topbar{
     position:absolute;top:0;left:0;right:0;z-index:600;

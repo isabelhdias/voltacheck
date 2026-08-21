@@ -142,9 +142,10 @@ report look fresh.
 - `design/VoltaCheck.dc.html` — the redesign handoff from Claude Design,
   committed because the share link needs a login agents here cannot hold.
   A prototype: read it for values, not structure.
-- `docs/map-style.md` — why the basemap is tinted rather than replaced, the
-  measurements behind the values, and what a vector-tile basemap would cost
-  if the water colour ever matters enough.
+- `docs/map-style.md` — why the basemap is still plain OSM, the measurements
+  that killed a CSS tint (OSM's land was already on-target; its
+  colourfulness is the actual difference), and what swapping to a flat
+  basemap would take. Read before trying to restyle the map.
 - `docs/redesign.md` — what shipped from that file, where the build
   deliberately differs, and why distance filtering widened the geolocation
   rule.
