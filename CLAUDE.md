@@ -79,7 +79,9 @@ now the fallback path, not the default.
   `--ok #12A05F`, `--full #E39B22`, `--down #DE4A3F`, `--stale #98A0AE`.
   Type is Archivo, loaded as a variable font because the wordmark needs the
   `wdth` axis. These come from `design/VoltaCheck.dc.html`; match what's
-  there.
+  there. `COLOR` in `app/config.js` duplicates the four status colours for
+  JS-painted elements — change both together, and `test/unit/tokens.test.js`
+  fails if you don't.
 
 ## Key mechanic
 
@@ -142,6 +144,10 @@ report look fresh.
 - `design/VoltaCheck.dc.html` — the redesign handoff from Claude Design,
   committed because the share link needs a login agents here cannot hold.
   A prototype: read it for values, not structure.
+- `docs/map-style.md` — why the basemap is still plain OSM, the measurements
+  that killed a CSS tint (OSM's land was already on-target; its
+  colourfulness is the actual difference), and what swapping to a flat
+  basemap would take. Read before trying to restyle the map.
 - `docs/redesign.md` — what shipped from that file, where the build
   deliberately differs, and why distance filtering widened the geolocation
   rule.

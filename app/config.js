@@ -23,7 +23,11 @@ export const MAX_PINS = 400;
 export const PAGE = 1000;
 
 export const LABEL = { ok:"A funcionar", full:"Cheia", down:"Avariada", stale:"Sem dados recentes" };
-export const COLOR = { ok:"#1F9E63", full:"#D9932B", down:"#D64545", stale:"#8C93A5" };
+// Must stay identical to --ok/--full/--down/--stale in index.html. These
+// paint the sheet's status pill, the filter chips and the checklist dots;
+// the CSS vars paint the pins. When they drift, the same machine is one
+// colour on the map and a slightly different one in the sheet.
+export const COLOR = { ok:"#12A05F", full:"#E39B22", down:"#DE4A3F", stale:"#98A0AE" };
 export const GLYPH = { ok:"✓", full:"▲", down:"✕", stale:"?" };
 
 /* The 11 chains tools/import_osm.py recognises by name at import time (see
