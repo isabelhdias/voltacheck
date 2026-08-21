@@ -5,24 +5,30 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#16233D">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Cêntimo — máquinas de depósito, estado em tempo real</title>
+<title>VoltaCheck — máquinas de depósito, estado em tempo real</title>
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
 
 <style>
   :root{
-    --ink:#16233D;
-    --ink-soft:#5A6786;
-    --paper:#F2F4F1;
-    --line:#DDE1DC;
-    --azulejo:#2F6FB2;
-    --ok:#1F9E63;
-    --full:#D9932B;
-    --down:#D64545;
-    --stale:#8C93A5;
+    /* Redesign palette — design/VoltaCheck.dc.html. The status four are the
+       load-bearing ones: they carry the decay mechanic, so --stale stays a
+       desaturated grey that cannot be mistaken for a fresh report. */
+    --ink:#14202E;
+    --ink-soft:#6B7688;
+    --ink-faint:#8A93A3;
+    --paper:#F4F2EC;
+    --line:#DCDAD2;
+    --line-soft:#EAE8E1;
+    --map:#E8E6DE;
+    --azulejo:#1F4FD8;
+    --ok:#12A05F;
+    --full:#E39B22;
+    --down:#DE4A3F;
+    --stale:#98A0AE;
     --sheet-h:0px;
   }
 
@@ -42,17 +48,25 @@
   .topbar{
     position:absolute;top:0;left:0;right:0;z-index:600;
     padding:calc(env(safe-area-inset-top) + 10px) 12px 10px;
-    background:linear-gradient(180deg,var(--paper) 62%,rgba(242,244,241,0));
+    background:linear-gradient(180deg,var(--paper) 66%,rgba(244,242,236,0));
     pointer-events:none;
   }
-  .brand{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
-  .brand h1{margin:0;font-size:19px;font-weight:800;letter-spacing:-.03em}
+  .brand{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .brand .mark{flex:none;color:var(--ink)}
+  /* 'wdth' 110 is the wordmark's own setting — Archivo is loaded as a
+     variable font precisely so this axis exists. Without the axis the
+     browser falls back to the normal width and the wordmark just reads
+     slightly narrow, rather than breaking. */
+  .brand h1{
+    margin:0;font-size:19px;font-weight:800;letter-spacing:-.035em;
+    font-variation-settings:'wdth' 110;
+  }
   .mode{
     pointer-events:auto;font-size:9.5px;font-weight:800;letter-spacing:.06em;
-    text-transform:uppercase;padding:2.5px 7px;border-radius:99px;
+    text-transform:uppercase;padding:3px 8px;border-radius:99px;
     border:1px solid var(--line);background:#fff;color:var(--ink-soft);
   }
-  .mode[data-live="1"]{color:var(--ok);border-color:rgba(31,158,99,.35)}
+  .mode[data-live="1"]{color:var(--ok);border-color:rgba(18,160,95,.4)}
   .filterbadge{
     pointer-events:auto;font:inherit;font-size:9.5px;font-weight:800;letter-spacing:.06em;
     text-transform:uppercase;padding:2.5px 7px;border-radius:99px;
@@ -116,13 +130,13 @@
   .tally button[aria-pressed="false"]{opacity:.45}
   .tally i{width:7px;height:7px;border-radius:99px;font-style:normal}
 
-  .search{position:relative;margin-top:8px;pointer-events:auto}
+  .search{position:relative;margin-top:9px;pointer-events:auto}
   .search input{
-    width:100%;padding:9px 13px;font:inherit;font-size:14px;font-weight:500;
+    width:100%;padding:10px 14px;font:inherit;font-size:14px;font-weight:500;
     border:1px solid var(--line);border-radius:99px;background:#fff;color:var(--ink);
     -webkit-appearance:none;appearance:none;
   }
-  .search input::placeholder{color:var(--ink-soft);font-weight:500}
+  .search input::placeholder{color:var(--ink-faint);font-weight:500}
   .search input::-webkit-search-cancel-button{-webkit-appearance:none}
   .results{
     position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:650;
@@ -144,64 +158,70 @@
   .results p{margin:0;padding:11px 13px;font-size:12.5px;font-weight:500;color:var(--ink-soft)}
 
   .pin{
-    display:grid;place-items:center;width:26px;height:26px;border-radius:99px;
-    border:2.5px solid #fff;box-shadow:0 2px 5px rgba(22,35,61,.32);
+    display:grid;place-items:center;width:30px;height:30px;border-radius:99px;
+    border:3px solid #fff;box-shadow:0 3px 8px rgba(20,32,46,.3);
     font-size:13px;line-height:1;font-weight:800;color:#fff;
   }
   .pin[data-s="ok"]{background:var(--ok)}
   .pin[data-s="full"]{background:var(--full)}
   .pin[data-s="down"]{background:var(--down)}
   .pin[data-s="stale"]{background:var(--stale)}
-  .pin.is-sel{transform:scale(1.28);z-index:9999}
+  .pin.is-sel{transform:scale(1.27);box-shadow:0 6px 14px rgba(20,32,46,.34);z-index:9999}
 
   .fabs{
     position:absolute;right:12px;z-index:600;
     bottom:calc(var(--sheet-h) + env(safe-area-inset-bottom) + 16px);
-    display:flex;flex-direction:column;gap:8px;transition:bottom .22s ease;
+    display:flex;flex-direction:column;gap:9px;transition:bottom .22s ease;
   }
   .fab{
-    width:46px;height:46px;border-radius:14px;border:1px solid var(--line);
+    width:48px;height:48px;border-radius:16px;border:1px solid var(--line);
     background:#fff;color:var(--ink);font-size:19px;
     display:grid;place-items:center;cursor:pointer;
-    box-shadow:0 3px 10px rgba(22,35,61,.14);
+    box-shadow:0 3px 10px rgba(20,32,46,.14);
   }
-  .fab.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .fab.primary{
+    background:var(--ink);color:var(--paper);border-color:var(--ink);
+    font-size:24px;font-weight:500;box-shadow:0 6px 16px rgba(20,32,46,.28);
+  }
   .fab[disabled]{opacity:.5}
 
   .sheet{
     position:absolute;left:0;right:0;bottom:0;z-index:700;
-    background:#fff;border-top:1px solid var(--line);border-radius:20px 20px 0 0;
-    padding:14px 16px calc(env(safe-area-inset-bottom) + 16px);
-    box-shadow:0 -6px 26px rgba(22,35,61,.16);
+    background:#fff;border-radius:26px 26px 0 0;
+    padding:14px 18px calc(env(safe-area-inset-bottom) + 26px);
+    box-shadow:0 -10px 34px rgba(20,32,46,.18);
     transform:translateY(102%);transition:transform .24s cubic-bezier(.3,.8,.4,1);
   }
   .sheet.open{transform:translateY(0)}
-  .sheet .grip{width:36px;height:4px;border-radius:99px;background:var(--line);margin:0 auto 12px}
-  .sheet h2{margin:0;font-size:17px;font-weight:800;letter-spacing:-.02em;line-height:1.25}
-  .meta{margin:5px 0 0;font-size:12px;color:var(--ink-soft);font-weight:500}
+  .sheet .grip{width:38px;height:4px;border-radius:99px;background:var(--line);margin:0 auto 14px}
+  .sheet h2{margin:0;font-size:21px;font-weight:800;letter-spacing:-.025em;line-height:1.2}
+  .meta{margin:6px 0 0;font-size:13px;color:var(--ink-soft);font-weight:500}
   .state{
-    display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:12px;
-    margin-top:10px;padding:4px 9px;border-radius:99px;color:#fff;
+    display:inline-flex;align-items:center;gap:7px;font-weight:700;font-size:12.5px;
+    margin-top:12px;padding:6px 12px;border-radius:99px;color:#fff;
   }
   .ask{
-    margin:14px 0 0;font-size:11px;font-weight:700;text-transform:uppercase;
-    letter-spacing:.08em;color:var(--ink-soft);
+    margin:18px 0 0;font-size:11px;font-weight:800;text-transform:uppercase;
+    letter-spacing:.09em;color:var(--ink-soft);
   }
-  .choices{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+  .choices{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:10px}
   .choice{
-    border:1.5px solid var(--line);background:#fff;border-radius:13px;
-    padding:11px 6px;font:inherit;font-weight:700;font-size:12.5px;color:var(--ink);
-    cursor:pointer;line-height:1.3;display:flex;flex-direction:column;align-items:center;gap:6px;
+    border:1.5px solid var(--line);background:#fff;border-radius:16px;
+    padding:14px 6px;font:inherit;font-weight:700;font-size:12.5px;color:var(--ink);
+    cursor:pointer;line-height:1.3;display:flex;flex-direction:column;align-items:center;gap:8px;
   }
-  .choice u{width:11px;height:11px;border-radius:99px;text-decoration:none}
+  .choice u{width:12px;height:12px;border-radius:99px;text-decoration:none}
+  /* The choice matching the machine's current state reads as selected, so
+     "Ainda está assim?" has an obvious answer to confirm. */
+  .choice[data-cur="1"]{border-color:var(--ok);background:rgba(18,160,95,.07)}
   .choice:active{transform:scale(.96)}
   .choice[disabled]{opacity:.5}
 
   .log{
-    margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line);
-    font-size:11.5px;color:var(--ink-soft);font-weight:500;max-height:78px;overflow-y:auto;
+    margin:16px 0 0;padding-top:12px;border-top:1px solid var(--line-soft);
+    font-size:12px;color:var(--ink-soft);font-weight:500;max-height:84px;overflow-y:auto;
   }
-  .log p{margin:0 0 4px;display:flex;justify-content:space-between;gap:10px}
+  .log p{margin:0 0 6px;display:flex;justify-content:space-between;gap:10px}
   .log em{font-style:normal;font-weight:700;color:var(--ink)}
 
   .empty{
@@ -223,29 +243,30 @@
   }
   body.adding .crosshair{display:block}
   .crosshair div{
-    width:34px;height:34px;border:3px solid var(--azulejo);
-    border-radius:99px;background:rgba(47,111,178,.16);
+    width:40px;height:40px;border:3px solid var(--azulejo);
+    border-radius:99px;background:rgba(31,79,216,.16);
   }
   .addbar{
-    position:absolute;left:12px;right:12px;z-index:700;
-    bottom:calc(env(safe-area-inset-bottom) + 16px);
-    background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px;
-    box-shadow:0 -4px 20px rgba(22,35,61,.14);display:none;
+    position:absolute;left:14px;right:14px;z-index:700;
+    bottom:calc(env(safe-area-inset-bottom) + 22px);
+    background:#fff;border:1px solid var(--line);border-radius:22px;padding:16px;
+    box-shadow:0 -6px 26px rgba(20,32,46,.16);display:none;
   }
   body.adding .addbar{display:block}
-  .addbar p{margin:0 0 9px;font-size:12.5px;font-weight:600;color:var(--ink-soft)}
+  .addbar p{margin:0 0 10px;font-size:12.5px;font-weight:600;color:var(--ink-soft)}
   .addbar input, .addbar select{
-    width:100%;padding:11px 12px;font:inherit;font-size:15px;font-weight:500;
-    border:1.5px solid var(--line);border-radius:11px;background:var(--paper);color:var(--ink);
+    width:100%;padding:13px 14px;font:inherit;font-size:14.5px;font-weight:600;
+    border:1.5px solid var(--line);border-radius:13px;background:var(--paper);color:var(--ink);
   }
+  .addbar input::placeholder{font-weight:500;color:var(--ink-faint)}
   .addbar input + input, .addbar input + select, .addbar select + input,
-  .addbar datalist + input{margin-top:9px}
-  .addbar .row{display:flex;gap:8px;margin-top:9px}
+  .addbar datalist + input{margin-top:10px}
+  .addbar .row{display:flex;gap:9px;margin-top:12px}
   .addbar button{
-    flex:1;padding:11px;font:inherit;font-weight:700;font-size:14px;border-radius:11px;
+    flex:1;padding:13px;font:inherit;font-weight:700;font-size:14px;border-radius:13px;
     border:1.5px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;
   }
-  .addbar button.go{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .addbar button.go{background:var(--ink);color:var(--paper);border-color:var(--ink)}
 
   .toast{
     position:absolute;left:50%;z-index:900;
@@ -267,7 +288,12 @@
 
 <header class="topbar">
   <div class="brand">
-    <h1>Cêntimo</h1>
+    <svg class="mark" viewBox="0 0 100 100" width="24" height="24" aria-hidden="true">
+      <path d="M74.04 25.96 A34 34 0 1 1 35.63 19.19" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round"></path>
+      <polygon points="47.4,13.7 39.4,27.4 31.8,11.0" fill="currentColor"></polygon>
+      <polyline points="35,51 45,61 65,40" fill="none" stroke="var(--ok)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"></polyline>
+    </svg>
+    <h1>VoltaCheck</h1>
     <span class="mode" id="mode">a ligar…</span>
     <button type="button" class="filterbadge" id="filterbadge" hidden>Filtros ativos · limpar</button>
   </div>

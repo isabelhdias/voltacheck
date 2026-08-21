@@ -43,6 +43,22 @@ export function select(id){
       ? "Ainda está assim?"
       : "Estiveste lá agora?";
 
+  // Mark the choice that matches the machine's current state, so
+  // "Ainda está assim?" has a visibly obvious answer to confirm. A stale
+  // machine has no current state to mark — which is the point of stale.
+  Array.prototype.forEach.call(document.querySelectorAll(".choice"), function(b){
+    if(s !== "stale" && b.dataset.s === s) b.dataset.cur = "1";
+    else delete b.dataset.cur;
+  });
+
+  // Mark the choice matching the machine's current state, so
+  // "Ainda está assim?" has a visibly obvious answer to confirm. A stale
+  // machine has no current state to mark — which is the point of stale.
+  Array.prototype.forEach.call(document.querySelectorAll(".choice"), function(b){
+    if(s !== "stale" && b.dataset.s === s) b.dataset.cur = "1";
+    else delete b.dataset.cur;
+  });
+
   var log = document.getElementById("s-log");
   log.innerHTML = (!m.reports || !m.reports.length)
     ? "<p>Ainda ninguém reportou esta máquina.</p>"
