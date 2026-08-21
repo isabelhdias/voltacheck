@@ -1,0 +1,78 @@
+{
+  "description": "paintOf(machine, now) — how a machine is DRAWN, as opposed to how it is filtered. statusOf() collapses an aged report to 'stale' for the filters and the counts; painting keeps the hue and marks it faded instead, so the map says what the machine last was without claiming it is that now. The two share one threshold: faded is true on exactly the inputs where statusOf returns 'stale' *and* a report exists. A machine with no reports at all has no hue to fade — it paints as tone 'stale', faded false, and that is the only thing grey now means. Each case also carries expectedLatestAt: the timestamp of latest(machine), which is what the sheet stamps beside the relative time.",
+  "constants": {
+    "staleAfterMs": 64800000,
+    "hourMs": 3600000
+  },
+  "paintCases": [
+    {
+      "id": "no-reports-is-grey-not-faded",
+      "description": "Nobody has ever reported this machine: there is no colour to wash out, so it paints grey at full strength.",
+      "now": 1700000000000,
+      "reports": [],
+      "expectedTone": "stale",
+      "expectedFaded": false,
+      "expectedLatestAt": null
+    },
+    {
+      "id": "fresh-ok-is-solid",
+      "description": "A report filed at the current instant paints its own colour, unfaded.",
+      "now": 1700000000000,
+      "reports": [{ "s": "ok", "at": 1700000000000 }],
+      "expectedTone": "ok",
+      "expectedFaded": false,
+      "expectedLatestAt": 1700000000000
+    },
+    {
+      "id": "exactly-at-threshold-not-yet-faded",
+      "description": "A report exactly staleAfterMs old is still current — same side of the boundary statusOf takes ('> staleAfterMs', not '>='), so the two can never disagree about one machine.",
+      "now": 1700000000000,
+      "reports": [{ "s": "full", "at": 1699935200000 }],
+      "expectedTone": "full",
+      "expectedFaded": false,
+      "expectedLatestAt": 1699935200000
+    },
+    {
+      "id": "just-over-threshold-fades-but-keeps-its-hue",
+      "description": "1ms past 18h. statusOf() says 'stale'; paintOf() keeps tone 'ok' and sets faded. This is the whole change: the pin does not go grey, it goes pale green.",
+      "now": 1700000000000,
+      "reports": [{ "s": "ok", "at": 1699935199999 }],
+      "expectedTone": "ok",
+      "expectedFaded": true,
+      "expectedLatestAt": 1699935199999
+    },
+    {
+      "id": "week-old-down-still-reads-red",
+      "description": "However old the report gets, the hue is kept and faded stays true — there is no second, harsher decay step.",
+      "now": 1700000000000,
+      "reports": [{ "s": "down", "at": 1699395200000 }],
+      "expectedTone": "down",
+      "expectedFaded": true,
+      "expectedLatestAt": 1699395200000
+    },
+    {
+      "id": "only-the-latest-report-is-painted",
+      "description": "Same rule as statusOf: the last element of reports decides both the tone and the timestamp, whatever came before it.",
+      "now": 1700000000000,
+      "reports": [
+        { "s": "down", "at": 1699000000000 },
+        { "s": "full", "at": 1699990000000 }
+      ],
+      "expectedTone": "full",
+      "expectedFaded": false,
+      "expectedLatestAt": 1699990000000
+    },
+    {
+      "id": "an-old-latest-report-fades-even-behind-fresher-looking-history",
+      "description": "reports is ordered, not sorted by the reader: an aged last element fades even when an earlier entry is newer. Guards a port that reaches for max(at) instead of last().",
+      "now": 1700000000000,
+      "reports": [
+        { "s": "ok", "at": 1699999000000 },
+        { "s": "full", "at": 1699800000000 }
+      ],
+      "expectedTone": "full",
+      "expectedFaded": true,
+      "expectedLatestAt": 1699800000000
+    }
+  ]
+}

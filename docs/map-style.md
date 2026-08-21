@@ -91,9 +91,15 @@ If a map treatment ever seems to have no effect, check that first.
 
 Whatever the basemap ends up being, the status colours carry the decay
 mechanic, and a treatment that dragged a working machine's green toward a
-stale grey would undermine the thing the app exists to do.
+faded one would undermine the thing the app exists to do — that difference
+got *smaller* when decay stopped meaning grey, so it matters more, not less.
 `test/e2e/pin-colours.spec.js` asserts a pin's painted colour equals its
-status colour exactly and that nothing overlays the map into the pins.
+status colour exactly — the washed-out one when the report has aged past 18h,
+the solid one otherwise — and that nothing overlays the map into the pins.
+`test/e2e/decay.spec.js` covers the aged case in full, ring included: a pale
+fill measures barely above the basemap on its own (1.02 against `--map` for
+amber), so the coloured ring is what keeps a faded pin findable and is not
+decoration to drop in a restyle.
 
 That file earned its place immediately: writing it is what surfaced that
 `app/config.js` had been left on the pre-redesign palette.

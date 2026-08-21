@@ -60,7 +60,18 @@ says why the radius is not biting.
 
 ## What did not change
 
-The decay mechanic. `--stale` is still a desaturated grey that cannot be
-mistaken for a fresh report, `STALE_AFTER` is still 18h, and nothing in the
-new palette makes an old report look recent. The colours were retuned; what
-they mean was not.
+The decay mechanic. `STALE_AFTER` is still 18h and nothing in the new palette
+makes an old report look recent. The colours were retuned; what they mean was
+not.
+
+**Later amendment.** How an aged report is *drawn* did change, after this
+document was written: it no longer drops to `--stale` grey. It keeps its hue
+and turns hollow — `--ok-faded` fill, `--ok` ring, `--ok-deep` glyph, and the
+two matching pairs — because grey threw away the last thing anyone knew about
+the machine, and read as harsher than the truth. Grey is now what a machine
+nobody has ever reported looks like. The rule this paragraph existed to state
+is unchanged and was the constraint the fade was designed against: a faded
+pin must be impossible to mistake for a fresh one, it is still counted and
+filtered as *no recent data*, and the sheet now spells out "sem dados
+recentes" next to the timestamp of the report. See "The decay is the point"
+in `README.md`.

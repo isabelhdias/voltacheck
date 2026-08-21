@@ -79,19 +79,32 @@ now the fallback path, not the default.
   `--ok #12A05F`, `--full #E39B22`, `--down #DE4A3F`, `--stale #98A0AE`.
   Type is Archivo, loaded as a variable font because the wordmark needs the
   `wdth` axis. These come from `design/VoltaCheck.dc.html`; match what's
-  there. `COLOR` in `app/config.js` duplicates the four status colours for
-  JS-painted elements — change both together, and `test/unit/tokens.test.js`
-  fails if you don't.
+  there. Aged reports add `--ok-faded`/`--ok-deep` and the two matching
+  pairs — the washed-out fill, and the dark tone of the same hue that keeps
+  the glyph readable on it. `COLOR`, `FADED` and `FADED_INK` in
+  `app/config.js` duplicate these for JS-painted elements — change both
+  together, and `test/unit/tokens.test.js` fails if you don't.
 
 ## Key mechanic
 
-A report decays to grey ("sem dados recentes") after 18h, so the map can't
-silently go stale. When a machine's last report is over 3h old, the sheet prompt
-changes from "Estiveste lá agora?" to "Ainda está assim?" to invite
-reconfirmation. `STALE_AFTER` and `RECONFIRM_AFTER` live in `app/config.js`.
+A report decays after 18h, so the map can't silently go stale. It doesn't go
+grey: the pin keeps its colour and turns **hollow** — pale fill, coloured
+ring, the hue's dark tone for the glyph — because dropping to grey threw away
+the one thing the app knew about the machine. Grey now means only "nobody has
+ever reported this". The sheet always shows when the last report was filed
+("Último report: 20/08, 08:06"), and adds "sem dados recentes" beside it once
+that report has aged out. When a machine's last report is over 3h old, the
+sheet prompt changes from "Estiveste lá agora?" to "Ainda está assim?" to
+invite reconfirmation. `STALE_AFTER` and `RECONFIRM_AFTER` live in
+`app/config.js`.
+
+The split that keeps this honest: `statusOf()` still collapses an aged report
+to `"stale"`, so the filters and the counts are unchanged — "Cheias" means
+machines someone *confirmed* were full, not ones that were full yesterday.
+Only `paintOf()` keeps the hue, and it marks what it returns `faded`.
 
 This decay is the point of the product. Don't add anything that makes a stale
-report look fresh.
+report look fresh — a faded pin must never be mistakable for a solid one.
 
 ## Files
 
@@ -101,11 +114,12 @@ report look fresh.
   `<script type="module" src="app/main.js">` that loads the app. No inline
   app logic lives here any more.
 - `app/config.js` — `SUPABASE_URL` / `SUPABASE_ANON_KEY` and the other
-  tunables (`STALE_AFTER`, `RECONFIRM_AFTER`, `LOOKBACK_H`, colours, labels).
+  tunables (`STALE_AFTER`, `RECONFIRM_AFTER`, `LOOKBACK_H`, colours including
+  the `FADED`/`FADED_INK` pair for aged reports, labels).
   Isabel pastes her Supabase values in here, not in `index.html`.
-- `app/domain.js` — pure status/search logic (decay, reconfirm threshold,
-  town search, chain filtering, distance, status filtering, concelho
-  suggestion). No
+- `app/domain.js` — pure status/search logic (decay, how a decayed machine is
+  painted, reconfirm threshold, town search, chain filtering, distance,
+  status filtering, concelho suggestion). No
   `document`/`window`/`localStorage`/`navigator`/`fetch` — this is the spec
   an iOS/Android port would mirror, and what `node --test` unit-tests
   directly.

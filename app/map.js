@@ -6,7 +6,7 @@
 
 import { MAX_PINS, GLYPH } from './config.js';
 import * as store from './store.js';
-import { statusOf, filterByChain, filterByStatus, filterByDistance, sortByDistance } from './domain.js';
+import { paintOf, filterByChain, filterByStatus, filterByDistance, sortByDistance } from './domain.js';
 
 export var map = L.map("map", { zoomControl:false }).setView([38.7380, -9.1450], 13);
 
@@ -20,14 +20,27 @@ L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
 var onSelect = function(){};
 export function setOnSelect(fn){ onSelect = fn; }
 
+// A pin is painted from paintOf(), not statusOf(): an aged report keeps its
+// colour and gets data-faded="1", which index.html draws washed out. Only a
+// machine nobody has ever reported is grey.
 function icon(m, now){
-  var s = statusOf(m, now);
+  var p = paintOf(m, now);
   return L.divIcon({
     className: "",
     html: '<div class="pin' + (store.selected === m.id ? " is-sel" : "") +
-          '" data-s="' + s + '">' + GLYPH[s] + '</div>',
+          '" data-s="' + p.tone + '"' + (p.faded ? ' data-faded="1"' : '') +
+          '>' + GLYPH[p.tone] + '</div>',
     iconSize:[26,26], iconAnchor:[13,13]
   });
+}
+
+// What the drawn icon depends on, as a string, so draw() can skip setIcon()
+// on pins that haven't changed. Crossing STALE_AFTER no longer changes the
+// tone (it used to flip to "stale"), so `faded` has to be in here or an
+// ageing pin would never be repainted.
+function iconKey(m, now){
+  var p = paintOf(m, now);
+  return p.tone + (p.faded ? "~" : "") + (store.selected === m.id ? "!" : "");
 }
 
 // The machines that pass the current chain + status filters, before any
@@ -76,7 +89,7 @@ export function draw(){
 
   onScreen(now).forEach(function(m){
     wanted[m.id] = true;
-    var key = statusOf(m, now) + (store.selected === m.id ? "!" : "");
+    var key = iconKey(m, now);
     var mk = markers[m.id];
     if(mk){
       if(mk._k !== key){ mk.setIcon(icon(m, now)); mk._k = key; }

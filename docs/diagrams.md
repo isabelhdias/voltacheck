@@ -89,21 +89,32 @@ long as it is plausibly still true.
 
 ```mermaid
 stateDiagram-v2
-  state "No recent data · grey pin · 'Sem dados recentes'" as stale
-  state "Fresh · green / amber / red pin" as fresh
+  state "Never reported · grey pin" as never
+  state "Fresh · solid green / amber / red pin" as fresh
   state "Still shown, but asks to be confirmed" as recon
+  state "Faded · same colour, hollow · 'sem dados recentes'" as faded
 
-  [*] --> stale
-  stale --> fresh: someone reports
+  [*] --> never
+  never --> fresh: someone reports
   fresh --> recon: 3 h · RECONFIRM_AFTER
-  recon --> stale: 18 h · STALE_AFTER
+  recon --> faded: 18 h · STALE_AFTER
   recon --> fresh: someone reports again
+  faded --> fresh: someone reports again
 ```
 
 Under 3 h the sheet asks **"Estiveste lá agora?"**. Past 3 h it switches to
 **"Ainda está assim?"** — same question, but it now reads as an invitation to
-reconfirm. Past 18 h the colour is gone and there is nothing left to confirm.
+reconfirm. Past 18 h there is nothing left to confirm: the pin keeps its
+colour but turns hollow, the sheet spells out *sem dados recentes*, and the
+prompt goes back to **"Estiveste lá agora?"** with no answer pre-ticked.
 Both thresholds live in `app/config.js`.
+
+Grey is now only the left-hand state — a machine nobody has ever reported.
+The faded state is a *drawing*, not a status: `statusOf()` still calls it
+`"stale"`, so the filters and the counts treat "full yesterday" as no recent
+data rather than as full. Only `paintOf()` keeps the hue. Every machine also
+carries the timestamp of its last report in the sheet, in all three states
+that have one.
 
 ## 5. What a report goes through
 

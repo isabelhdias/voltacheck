@@ -11,7 +11,7 @@
 // and writing the first test here surfaced that app/config.js had been
 // left on the pre-redesign palette.
 import { test, expect, gotoApp, centerPin } from './fixtures.js';
-import { COLOR } from '../../app/config.js';
+import { COLOR, FADED } from '../../app/config.js';
 
 test.use({ viewport: { width: 834, height: 1112 } });
 
@@ -33,6 +33,7 @@ test.describe('pin colours', () => {
       return {
         bg: cs.backgroundColor,
         status: el.dataset.s,
+        faded: el.dataset.faded === '1',
         // A filter inherited from an ancestor would shift the rendered
         // colour even though backgroundColor still reads clean.
         filter: cs.filter,
@@ -41,7 +42,11 @@ test.describe('pin colours', () => {
     });
     expect(painted, 'no pin on screen to check').not.toBeNull();
 
-    const [r, g, b] = rgb(COLOR[painted.status]);
+    // A pin past STALE_AFTER paints the washed-out sibling of its colour
+    // rather than the colour itself — still exact, still untinted, and
+    // decay.spec.js is where that case is pinned down properly.
+    const table = painted.faded ? FADED : COLOR;
+    const [r, g, b] = rgb(table[painted.status]);
     expect(painted.bg).toBe(`rgb(${r}, ${g}, ${b})`);
     expect(painted.filter, 'a pin must not be filtered').toBe('none');
     expect(painted.paneFilter, 'the marker pane must not be filtered').toBe('none');

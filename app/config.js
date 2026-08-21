@@ -5,7 +5,7 @@ export const SUPABASE_URL      = "https://ydtegeetihlhqwjefhyv.supabase.co";
 export const SUPABASE_ANON_KEY = "sb_publishable_5gy4cDcQ10CaaAW3NKri-A_M3cflIvW";
 
 export const HOUR = 3600000;
-export const STALE_AFTER = 18 * HOUR;      // report decays to grey after this
+export const STALE_AFTER = 18 * HOUR;      // report fades after this — see FADED below
 export const RECONFIRM_AFTER = 3 * HOUR;   // sheet prompt switches to "Ainda está assim?"
 export const LOOKBACK_H = 72;              // how far back to pull reports
 export const KEY = "centimo.v2";
@@ -29,6 +29,18 @@ export const LABEL = { ok:"A funcionar", full:"Cheia", down:"Avariada", stale:"S
 // colour on the map and a slightly different one in the sheet.
 export const COLOR = { ok:"#12A05F", full:"#E39B22", down:"#DE4A3F", stale:"#98A0AE" };
 export const GLYPH = { ok:"✓", full:"▲", down:"✕", stale:"?" };
+
+// Past STALE_AFTER a report no longer drops to grey — it keeps its hue and
+// loses its weight, so the map still says *what the machine last was*
+// without claiming it is that now. FADED is the washed-out fill, FADED_INK
+// the dark tone of the same hue that the glyph and the pill's text use, so
+// the pale fill stays readable. Grey is now reserved for a machine nobody
+// has ever reported: nothing to fade.
+//
+// Same duplication rule as COLOR: these mirror --ok-faded/--ok-deep and
+// friends in index.html, and test/unit/tokens.test.js fails if they drift.
+export const FADED     = { ok:"#C4E7D7", full:"#F8E6C8", down:"#F7D2CF" };
+export const FADED_INK = { ok:"#0B633B", full:"#8D6015", down:"#8A2E27" };
 
 /* The 11 chains tools/import_osm.py recognises by name at import time (see
    CHAIN_PATTERNS there) — kept in sync by hand, since the two run in
