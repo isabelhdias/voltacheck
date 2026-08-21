@@ -16,10 +16,24 @@ name: Pages
 # nothing to clean up, and there is no state to drift.
 #
 # REQUIRES Pages source set to "GitHub Actions" (Settings -> Pages).
+# pull_request_target, not pull_request, and the difference is load-bearing.
+# The github-pages environment only accepts deployments from the default
+# branch, so a pull_request run — whose ref is the PR branch — has its
+# deploy rejected outright: the site builds, then nothing publishes.
+# pull_request_target runs in the base branch's context, which the
+# environment accepts.
+#
+# The usual danger with pull_request_target is that it hands a write token
+# to a workflow triggered by someone else's branch. Two things keep that
+# closed here: the workflow file itself always comes from main, so a PR
+# cannot edit what runs; and nothing from a PR is ever executed — its files
+# are copied as static assets, never built, installed or sourced. Forks are
+# skipped entirely (see the filter below), so the files copied are from
+# branches in this repo.
 on:
   push:
     branches: [main]
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
 
@@ -153,7 +167,7 @@ jobs:
   comment:
     name: Link the preview
     needs: deploy
-    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    if: github.event_name == 'pull_request_target' && github.event.action != 'closed'
     runs-on: ubuntu-latest
     steps:
       # One comment per PR, edited in place rather than a new one on every
