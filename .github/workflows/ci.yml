@@ -3,6 +3,13 @@ name: CI
 on:
   push:
     branches: [main]
+  # Pull requests too. Without this a PR gets no CI at all, and since
+  # Isabel can't run anything locally, reviewing one would mean taking the
+  # tests on faith — which is the opposite of why this workflow exists.
+  # Safe to run on PRs: no step here touches a secret. The containers the
+  # integration layer needs are built on the runner.
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
