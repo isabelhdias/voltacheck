@@ -1,6 +1,12 @@
 # Architecture
 
-What VoltaCheck is made of, right now — not a plan.
+What VoltaCheck is made of, right now — not a plan. For the same thing drawn
+rather than described — the module graph, the boot sequence, what a report and
+a submission each go through — see [`docs/diagrams.md`](diagrams.md).
+
+Both files describe the code as it is, so both go stale the moment it
+changes. "Keeping the docs true" in `CLAUDE.md` lists which section and which
+diagram each kind of change has to update, in the same commit as the change.
 
 ## No build step
 
