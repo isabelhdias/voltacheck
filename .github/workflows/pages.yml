@@ -1,0 +1,182 @@
+name: Pages
+
+# Publishes the site, and a preview of every open pull request alongside it.
+#
+# Isabel works from a phone and cannot run a dev server, so until now the
+# only way to look at a change was to merge it and see what happened on the
+# live site. This puts each PR at its own URL first:
+#
+#   https://isabelhdias.github.io/voltacheck/              <- main, live
+#   https://isabelhdias.github.io/voltacheck/preview/pr-6/ <- PR #6
+#
+# A repo gets exactly one Pages site, so previews cannot be a second one.
+# Instead the whole site is rebuilt on every run: main at the root, each
+# open PR under preview/pr-N/. That means previews are always exactly the
+# set of open PRs — a closed PR's preview disappears on the next run with
+# nothing to clean up, and there is no state to drift.
+#
+# REQUIRES Pages source set to "GitHub Actions" (Settings -> Pages).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  pull-requests: write
+
+# Never let two deploys race. Deploys are not cancelled in flight — a
+# half-published site is worse than a queued one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Assemble the live site
+        run: |
+          mkdir -p _site
+          # Everything the browser needs, and nothing else. Tests, tooling
+          # and docs are not served; node_modules never even gets installed.
+          cp -r index.html app seed _site/
+          echo "Live site:"; ls _site
+
+          # The production values, taken from main rather than hardcoded
+          # here, so this cannot drift when the keys are rotated. They are
+          # not secrets — the anon key is designed to be public and is in
+          # the repo — but a preview containing them is a preview that can
+          # write to the real database, which is the thing to prevent.
+          {
+            echo "PROD_URL=$(sed -nE 's|^export const SUPABASE_URL[[:space:]]*=[[:space:]]*"([^"]*)".*|\1|p' app/config.js)"
+            echo "PROD_KEY=$(sed -nE 's|^export const SUPABASE_ANON_KEY[[:space:]]*=[[:space:]]*"([^"]*)".*|\1|p' app/config.js)"
+          } >> "$GITHUB_ENV"
+
+      # Each PR is copied in separately and is allowed to fail on its own.
+      # A preview must never be able to block the live site from shipping —
+      # that would make this workflow strictly worse than the plain branch
+      # deploy it replaces.
+      - name: Add a preview for each open pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          prs=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open \
+                  --json number,headRefName,headRepositoryOwner \
+                  --jq '.[] | select(.headRepositoryOwner.login == "${{ github.repository_owner }}") | .number')
+
+          if [ -z "$prs" ]; then
+            echo "No open pull requests from this repo — nothing to preview."
+            exit 0
+          fi
+
+          for n in $prs; do
+            echo "::group::preview for PR #$n"
+            (
+              set -e
+              rm -rf "$RUNNER_TEMP/pr"
+              git fetch origin "pull/$n/head:pr-$n" --depth 1
+              rm -rf "$RUNNER_TEMP/wt" && git worktree add --detach "$RUNNER_TEMP/wt" "pr-$n"
+
+              dest="_site/preview/pr-$n"
+              mkdir -p "$dest"
+              cp -r "$RUNNER_TEMP/wt/index.html" "$RUNNER_TEMP/wt/app" "$RUNNER_TEMP/wt/seed" "$dest/"
+
+              # Previews run in LOCAL MODE. Blanking these two values is what
+              # keeps an unreviewed branch from writing to the live database
+              # — it falls back to localStorage and the bundled seed instead.
+              # Done with a line-anchored sed so it cannot quietly match
+              # something else; the check below fails the preview if either
+              # line did not end up empty.
+              cfg="$dest/app/config.js"
+              sed -i -E 's|^(export const SUPABASE_URL[[:space:]]*=[[:space:]]*)".*";|\1"";|' "$cfg"
+              sed -i -E 's|^(export const SUPABASE_ANON_KEY[[:space:]]*=[[:space:]]*)".*";|\1"";|' "$cfg"
+
+              # Two checks, because the sed above only knows the shape the
+              # config has today. The first says the lines look blank; the
+              # second — the one that actually matters — says the production
+              # URL and key appear nowhere in the preview at all, whatever
+              # shape a branch might have rewritten config.js into.
+              if grep -qE '^export const SUPABASE_(URL|ANON_KEY)[[:space:]]*=[[:space:]]*"[^"]+";' "$cfg"; then
+                echo "REFUSING: preview config still points at a real project."
+                grep -nE '^export const SUPABASE_' "$cfg"
+                exit 1
+              fi
+
+              if [ -n "$PROD_URL" ] && grep -rqF "$PROD_URL" "$dest"; then
+                echo "REFUSING: the live project URL appears somewhere in this preview."
+                grep -rlF "$PROD_URL" "$dest"
+                exit 1
+              fi
+              if [ -n "$PROD_KEY" ] && grep -rqF "$PROD_KEY" "$dest"; then
+                echo "REFUSING: the live anon key appears somewhere in this preview."
+                grep -rlF "$PROD_KEY" "$dest"
+                exit 1
+              fi
+
+              echo "PR #$n preview built in local mode."
+            ) || {
+              echo "::warning::preview for PR #$n failed to build; the live site is unaffected."
+              rm -rf "_site/preview/pr-$n"
+            }
+            git worktree remove --force "$RUNNER_TEMP/wt" 2>/dev/null || true
+            echo "::endgroup::"
+          done
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Deploy to Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
+
+  comment:
+    name: Link the preview
+    needs: deploy
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      # One comment per PR, edited in place rather than a new one on every
+      # push — a preview link that reposts itself ten times is noise.
+      - name: Post or update the preview link
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          N: ${{ github.event.pull_request.number }}
+        run: |
+          url="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/preview/pr-$N/"
+          marker="<!-- preview-link -->"
+          body="$marker
+          **Pré-visualização:** $url
+
+          Corre em modo local (dados de exemplo, \`localStorage\`) — nada do que fizeres aqui toca a base de dados a sério."
+
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/issues/$N/comments" \
+                       --jq "[.[] | select(.body | contains(\"$marker\"))] | .[0].id")
+
+          if [ -n "$existing" ] && [ "$existing" != "null" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -f body="$body" >/dev/null
+            echo "Updated the preview link on #$N."
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$N/comments" -f body="$body" >/dev/null
+            echo "Posted the preview link on #$N."
+          fi

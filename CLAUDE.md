@@ -149,6 +149,16 @@ report look fresh.
 - `.github/workflows/ci.yml` — runs unit, integration, and e2e tests on every
   push to `main`. The only feedback loop Isabel has, since she can't run
   anything locally — read as pass/fail on her phone.
+- `.github/workflows/pages.yml` — publishes the site and a preview of
+  every open PR at `/preview/pr-N/`. Previews run in **local mode**: the
+  workflow blanks `SUPABASE_URL`/`SUPABASE_ANON_KEY` in its copy, then
+  refuses to publish if the live URL or key appears anywhere in the
+  preview at all — an unreviewed branch must never be able to write to
+  the real database. The whole site is rebuilt each run, so previews are
+  always exactly the open PRs and a closed one disappears by itself. A
+  failed preview is a warning, never a blocked deploy: previewing a change
+  must not be able to stop the live site shipping. Needs Pages source set
+  to "GitHub Actions".
 - `.github/workflows/migrate.yml` — applies `schema.sql` and
   `seed/machines.sql` to the live database in one transaction, manual
   trigger only. Runs the integration suite first and verifies row counts
