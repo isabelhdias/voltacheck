@@ -210,6 +210,9 @@ reported.
   under `private.telemetry_*`.
 - `docs/supabase-setup.md` — the step-by-step for creating the project and
   going from local mode to shared. Written for an iPad; no CLI.
+- `docs/branch-protection.md` — why nothing pushes to `main` and the exact
+  ruleset that enforces it. A GitHub setting, not code: agents can't apply
+  it, so it's one of the few things only Isabel can do.
 - `design/VoltaCheck.dc.html` — the redesign handoff from Claude Design,
   committed because the share link needs a login agents here cannot hold.
   A prototype: read it for values, not structure.
@@ -355,8 +358,11 @@ their output yourself before reporting it as done — do not hand her a diff to
 check. Treat CI as the thing that proves a change is good, because she cannot
 run anything locally.
 
-- Small, single-purpose commits with clear messages, pushed to `main` so Isabel
-  can check each one on her phone. No PRs unless asked.
+- Small, single-purpose commits with clear messages. **`main` is protected —
+  nothing pushes to it directly.** Work on a branch and open a PR; Isabel
+  merges it from her phone. Every open PR gets CI and its own preview at
+  `/preview/pr-N/`, so hand her both links, not a diff. See
+  `docs/branch-protection.md`.
 - Say plainly when a step needs something only Isabel can do — creating the
   Supabase project, pasting keys, widening the session network policy. Keep
   that list as short as possible; every manual step is one she has to do by

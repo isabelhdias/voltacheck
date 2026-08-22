@@ -133,7 +133,7 @@ published at `/preview/pr-N/` with the database keys blanked.
 | `schema.sql` | tables, RLS, and the three functions that are the only way to write — reports, machine submissions, and telemetry |
 | `tools/` | the OpenStreetMap importer, the review-queue renderer, the screenshot script |
 | `test/` | vectors, unit, integration, e2e |
-| `docs/` | [architecture](docs/architecture.md) · [diagrams](docs/diagrams.md) · [domain contract](docs/domain-contract.md) · [rate limiting](docs/rate-limiting-plan.md) · [observability](docs/observability-plan.md) · [seed data](docs/seed-data-plan.md) · [Supabase setup](docs/supabase-setup.md) · [redesign](docs/redesign.md) |
+| `docs/` | [architecture](docs/architecture.md) · [diagrams](docs/diagrams.md) · [domain contract](docs/domain-contract.md) · [rate limiting](docs/rate-limiting-plan.md) · [observability](docs/observability-plan.md) · [seed data](docs/seed-data-plan.md) · [Supabase setup](docs/supabase-setup.md) · [redesign](docs/redesign.md) · [branch protection](docs/branch-protection.md) |
 
 Changing any of it? `CLAUDE.md` lists which of these docs — and which
 diagram — each kind of change has to update, in the same commit.
