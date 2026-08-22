@@ -412,6 +412,11 @@ function pickRadius(metres){
 
 /* ───────── abrir e fechar o painel ───────── */
 
+// The sheet is unhidden first and only gains `open` on the next frame, so
+// the CSS transition has a from-state to animate out of. That frame is the
+// problem below — see closeFilters().
+var openRaf = null;
+
 export function openFilters(){
   closeSheet();
   buildStatusList();
@@ -420,7 +425,8 @@ export function openFilters(){
   updateFilterState();
   filtersEl.hidden = false;
   scrimEl.hidden = false;
-  requestAnimationFrame(function(){
+  openRaf = requestAnimationFrame(function(){
+    openRaf = null;
     filtersEl.classList.add("open");
     scrimEl.classList.add("open");
   });
@@ -428,6 +434,14 @@ export function openFilters(){
 }
 
 export function closeFilters(){
+  // Cancel the frame openFilters() scheduled, if it has not run yet. A close
+  // can land inside that window — Escape straight after the tap, or a fast
+  // double tap — and if the frame then runs it re-adds `open` after this
+  // removed it. The timeout below checks for `open` before hiding anything,
+  // so it declines, and the sheet is left visible with nothing pending to
+  // close it: stuck open until the next tap. Rare by hand, reliable under
+  // Playwright, which is where it showed up.
+  if(openRaf !== null){ cancelAnimationFrame(openRaf); openRaf = null; }
   filtersEl.classList.remove("open");
   scrimEl.classList.remove("open");
   filterBtn.setAttribute("aria-expanded", "false");
