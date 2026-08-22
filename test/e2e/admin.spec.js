@@ -90,9 +90,16 @@ window.supabase = {
           },
           enroll: function(){
             S.mfa = 'enrolled';
+            // Exactly the shape Supabase returns, quotes and all: a data: URL
+            // whose payload is raw, unencoded SVG. Concatenating this into a
+            // src="..." attribute is what ended the attribute early, broke the
+            // image, and let the rest of the SVG escape into the form as real
+            // elements — a second QR code drawn across the page.
             return Promise.resolve({ data:{ id:'f1', totp:{
-              qr_code:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"></svg>',
-              secret:'JBSWY3DPEHPK3PXP' } }, error:null });
+              qr_code:'data:image/svg+xml;utf-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 4"><rect width="4" height="4" fill="#fff"/><rect width="2" height="2" fill="#000"/></svg>',
+              secret:'JBSWY3DPEHPK3PXP',
+              uri:'otpauth://totp/VoltaCheck:isabel@example.com?secret=JBSWY3DPEHPK3PXP&issuer=VoltaCheck'
+            } }, error:null });
           },
           unenroll: function(){ return Promise.resolve({ data:{}, error:null }); },
           challengeAndVerify: function(c){
@@ -277,6 +284,47 @@ test.describe('admin panel', () => {
     await expect(screen).toContainText('≤');
     await expect(screen).toContainText('x is not a function');
     await expect(screen).toContainText('app.boot');
+  });
+
+  // Enrolling happens on the phone the authenticator app is on, so a QR code
+  // has no second screen to be pointed at. The otpauth:// link is the path
+  // that actually works there, and it leads.
+  test('enrolment leads with a link the phone can act on', async ({ page }) => {
+    await openAdmin(page, { mfa: 'none' });
+    await page.fill('#email', 'isabel@example.com');
+    await page.fill('#pw', 'correct');
+    await page.click('#login button');
+    await page.waitForTimeout(500);
+
+    await expect(page.locator('#enrol')).toBeVisible();
+    const link = page.locator('#otpauth');
+    await expect(link).toBeVisible();
+    expect(await link.getAttribute('href')).toMatch(/^otpauth:\/\/totp\//);
+    // And the key is still there in full, with a way to copy it that is not
+    // "select 32 monospace characters in a readonly input with your thumb".
+    await expect(page.locator('#secret')).toHaveValue('JBSWY3DPEHPK3PXP');
+    await expect(page.locator('#copykey')).toBeVisible();
+  });
+
+  test('the QR renders inside its box instead of leaking across the form', async ({ page }) => {
+    await openAdmin(page, { mfa: 'none' });
+    await page.fill('#email', 'isabel@example.com');
+    await page.fill('#pw', 'correct');
+    await page.click('#login button');
+    await page.waitForTimeout(500);
+
+    // One SVG, inside #qr.
+    await expect(page.locator('#qr > svg')).toHaveCount(1);
+    // No broken <img>: the data URL is decoded rather than jammed into a src.
+    expect(await page.locator('#qr img').count()).toBe(0);
+    // And nothing escaped into the form around it — this is what the bug
+    // looked like on screen: a second QR drawn over the labels and fields.
+    expect(await page.locator('#enrol > svg, #enrol > rect, #enrol > path').count()).toBe(0);
+    // It also has to stay inside its 180px box rather than laying itself out
+    // at the SVG's own natural size.
+    const box = await page.locator('#qr').boundingBox();
+    expect(box.width).toBeLessThanOrEqual(200);
+    expect(box.height).toBeLessThanOrEqual(200);
   });
 
   // ───────────────── when the panel itself is broken ─────────────────

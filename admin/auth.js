@@ -107,7 +107,17 @@ export async function enrol(){
 
   var e = await sb.auth.mfa.enroll({ factorType: "totp", friendlyName: "VoltaCheck" });
   if(e.error) throw e.error;
-  return { id: e.data.id, qr: e.data.totp.qr_code, secret: e.data.totp.secret };
+  // `uri` is the otpauth:// URI. On a phone it is the only one of these three
+  // that is actually useful: the authenticator app is on the same device, so
+  // there is no second screen to point a camera at, and a 32-character base32
+  // key is miserable to retype. Tapping the link hands the account straight
+  // to the app.
+  return {
+    id: e.data.id,
+    qr: e.data.totp.qr_code,
+    secret: e.data.totp.secret,
+    uri: e.data.totp.uri,
+  };
 }
 
 export async function confirmEnrol(factorId, code){

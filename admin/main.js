@@ -101,13 +101,60 @@ async function startEnrol(){
   try {
     var f = await auth.enrol();
     enrolFactor = f.id;
-    // Supabase hands back the QR as an SVG string or a data: URL depending on
-    // the client version, so both are handled rather than guessed at.
-    var qr = document.getElementById("qr");
-    qr.innerHTML = /^data:/.test(f.qr) ? '<img alt="QR code" src="' + f.qr + '">' : f.qr;
     document.getElementById("secret").value = f.secret;
+
+    // The link is the phone path and comes first, because the authenticator
+    // is nearly always on the same device as this page — where a QR code has
+    // no second screen to be pointed at.
+    var link = document.getElementById("otpauth");
+    var linkNote = document.getElementById("otpauth-note");
+    link.hidden = linkNote.hidden = !f.uri;
+    if(f.uri) link.href = f.uri;
+
+    renderQr(document.getElementById("qr"), f.qr);
   } catch(err){
     fail(err);
+  }
+}
+
+// Supabase returns the QR as a data: URL whose payload is raw, unencoded SVG.
+// This used to build the tag by concatenation —
+//
+//   qr.innerHTML = '<img alt="QR code" src="' + f.qr + '">'
+//
+// — which ends the src attribute at the SVG's first quote. The image breaks,
+// and the remainder of the SVG escapes the attribute and is parsed as real
+// elements, drawing a second QR code across the rest of the form. Never build
+// markup from a string you did not write: set the property, or decode the
+// payload and insert it as the SVG it already is.
+function renderQr(el, data){
+  el.textContent = "";
+  if(!data) return;
+
+  if(/^data:image\/svg\+xml/i.test(data)){
+    var svg = decodeDataUrl(data);
+    if(svg) { el.innerHTML = svg; return; }
+  }
+  if(/^data:/.test(data)){
+    var img = document.createElement("img");
+    img.alt = "QR code";
+    img.src = data;              // a property: nothing here is parsed as HTML
+    el.appendChild(img);
+    return;
+  }
+  el.innerHTML = data;           // already an <svg> document
+}
+
+function decodeDataUrl(u){
+  var comma = u.indexOf(",");
+  if(comma < 0) return null;
+  var meta = u.slice(0, comma), body = u.slice(comma + 1);
+  try {
+    return /;base64/i.test(meta) ? atob(body) : decodeURIComponent(body);
+  } catch(e){
+    // A utf-8 payload is often not percent-encoded at all, in which case
+    // decodeURIComponent throws on a bare % and the raw body is what we want.
+    return body;
   }
 }
 
@@ -123,6 +170,29 @@ forms.enrol.addEventListener("submit", async function(e){
     fail(err);
   }
   busy(forms.enrol, false);
+});
+
+document.getElementById("copykey").addEventListener("click", function(){
+  var input = document.getElementById("secret");
+  var btn = this;
+  function done(ok){
+    btn.textContent = ok ? "Copied" : "Press and hold the key to copy";
+    setTimeout(function(){ btn.textContent = "Copy key"; }, 2500);
+  }
+  function fallback(){
+    // execCommand is deprecated and still the only thing that works without
+    // a secure context or clipboard permission.
+    try {
+      input.focus();
+      input.setSelectionRange(0, input.value.length);
+      done(document.execCommand("copy"));
+    } catch(e){ done(false); }
+  }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(input.value).then(function(){ done(true); }, fallback);
+  } else {
+    fallback();
+  }
 });
 
 document.getElementById("signout").addEventListener("click", async function(){

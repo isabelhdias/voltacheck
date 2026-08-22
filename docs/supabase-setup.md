@@ -329,9 +329,16 @@ whenever.
    values ('...', '...');
    ```
 
-4. Reload. It now asks for a second factor: scan the QR code with any
-   authenticator app (or type the key it shows), then type the six digits
-   back. From then on, signing in is password + six digits.
+4. Reload. It now asks for a second factor. **On the phone your authenticator
+   app is on — which is the usual case — tap "Open my authenticator app".**
+   That hands the account straight to the app; there is no second screen to
+   point a camera at, so the QR code is only useful when you are enrolling
+   from a different device. Then type the six digits back. From then on,
+   signing in is password + six digits.
+
+   If the link does nothing (some authenticators do not register the
+   `otpauth://` scheme), use **Copy key** and add the account by hand — every
+   authenticator can take a setup key.
 
 Why a second factor is not optional: `is_admin()` requires an `aal2` claim,
 which only a passed TOTP challenge produces, so somebody with your password
