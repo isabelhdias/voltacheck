@@ -37,7 +37,7 @@ Roadmap, in priority order:
    table anon can neither read nor write. Isabel approves rows in the
    Supabase Table Editor and a trigger copies them into `machines`.
    Submitting needs no proximity (people map from home); *reporting* a
-   machine's state still does, now within 2 km. Approving is a checkbox in
+   machine's state still does, now within 5 km. Approving is a checkbox in
    the review-queue issue, not a trip to the Table Editor. See
    `docs/supabase-setup.md`.
 7. ~~Set the machine's details instead of inferring them~~ — done. The form

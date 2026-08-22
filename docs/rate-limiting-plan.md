@@ -178,10 +178,10 @@ begin
   who_ip := private.guard_hash('ip', ip);
   who    := private.guard_hash('dev', coalesce(nullif(device, ''), ip));
 
-  -- Proximity, 2 km. The point of this check was never to prove someone is
+  -- Proximity, 5 km. The point of this check was never to prove someone is
   -- standing at the machine — it's to accept a fresh *observation*: someone
-  -- who just left the shop, reporting from the car park or a couple of
-  -- minutes down the road on foot or by car, while still rejecting a report
+  -- who just left the shop, reporting from the car park or a few minutes
+  -- down the road on foot or by car, while still rejecting a report
   -- from across the region, which isn't an observation of this machine at
   -- all. `acc` is the browser's own accuracy radius in metres, and it is
   -- deliberately not capped: with iOS Precise Location off the radius is
@@ -193,7 +193,7 @@ begin
   -- costs nothing against anyone actually determined to lie.
   if lat is not null and lng is not null then
     slack := greatest(coalesce(acc, 0), 0);
-    if private.metres_between(lat, lng, m_lat, m_lng) > 2000 + slack then
+    if private.metres_between(lat, lng, m_lat, m_lng) > 5000 + slack then
       return 'far';
     end if;
   end if;
@@ -538,18 +538,27 @@ Be honest about this when describing it to anyone.
    returned the *shape* of the header rather than its value, so even while it
    was installed it could not hand anyone an IP. If something similar is ever
    needed again, build it that way, and take it back out afterwards.
-4. **Decide the numbers.** 2 km, 10 min, 20/hour, 60/day, 300/hour per IP are
+4. **Decide the numbers.** 5 km, 10 min, 20/hour, 60/day, 300/hour per IP are
    judgement calls, not findings. The proximity radius started at 500 m and
-   was widened to 2 km: a large retail park or a shopping centre car park can
-   be 300 m across, a phone indoors is often 50–100 m out on top of that, and
-   500 m also rejected the ordinary case of someone reporting from the car
-   park, or a couple of minutes down the road, right after leaving the shop —
-   which is still a real, fresh observation, not a stale or fabricated one.
+   went to 2 km, then to 5 km: a large retail park or a shopping centre car
+   park can be 300 m across, a phone indoors is often 50–100 m out on top of
+   that, and 500 m also rejected the ordinary case of someone reporting from
+   the car park, or a couple of minutes down the road, right after leaving
+   the shop — which is still a real, fresh observation, not a stale or
+   fabricated one. 2 km covered the car park and the walk home; 5 km covers
+   the drive, which is how most people leave a supermarket outside a city
+   centre, and how most reports will actually be filed — at the next set of
+   lights, not in the aisle.
+
    Because the check fails open on missing coordinates, widening it only ever
    costs something against a person who was already sharing their real
-   location; it costs nothing against anyone willing to fake one. 2 km stops
-   being generous once a report claims to be from a whole other town — that's
-   no longer an observation of this machine at all.
+   location; it costs nothing against anyone willing to fake one. What 5 km
+   gives up over 2 km is thin: in dense Lisbon or Porto it now spans several
+   neighbourhoods and a good number of other machines, so a mis-tapped pin
+   across town is accepted where it used to be caught. That is a real loss,
+   and it is the reason not to go wider still — past 5 km a report is
+   plausibly from a different errand entirely, and that is no longer an
+   observation of this machine at all.
 5. **A decision, not a task:** whether to ask for location at all. The check
    fails open — no permission means the report still goes through — so the
    worst case for a user who says no is that they see a browser prompt once and

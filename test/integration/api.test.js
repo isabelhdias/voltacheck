@@ -23,6 +23,9 @@ import {
   reapplySchema,
   reapplySeed,
 } from './docker-env.js';
+// Same haversine the database uses, term for term — see app/domain.js. Only
+// used here to keep the distance-based fixtures honest.
+import { metresBetween } from '../../app/domain.js';
 
 const LONG = { timeout: 60_000 };
 const TOTAL_MACHINES = 2444;
@@ -110,9 +113,16 @@ if (!dockerAvailable()) {
   });
 
   test('report_machine: from Porto coords returns far', LONG, async () => {
-    // Porto city centre — comfortably >2km from any single machine.
+    // Porto city centre — a different city from the fixture machine, which
+    // is the point of the case. Asserted rather than assumed: the fixture is
+    // whichever machine comes back first, and a fixture that happened to be
+    // in Porto would make this test pass for no reason.
+    const porto = { lat: 41.1579, lng: -8.6291 };
+    const away = metresBetween(porto.lat, porto.lng, machineLat, machineLng);
+    assert.ok(away > 5000, `fixture sanity: machine is ${Math.round(away)}m from Porto, needs to be >5000`);
+
     const result = await reportMachine(
-      { machine: machineId, state: 'ok', lat: 41.1579, lng: -8.6291 },
+      { machine: machineId, state: 'ok', ...porto },
       '85.240.10.7',
     );
     assert.equal(result, 'far');
@@ -146,11 +156,12 @@ if (!dockerAvailable()) {
     assert.equal(result, 'ok');
   });
 
-  // The radius widened from 500m to 2km — see docs/rate-limiting-plan.md.
-  // ~0.0135° of latitude is ~1.5km, ~0.045° is ~5km (matches the Porto and
-  // 5km-with-approximate-fix cases above).
+  // The radius widened 500m → 2km → 5km — see docs/rate-limiting-plan.md.
+  // A degree of latitude is ~111km, so ~0.0135° is ~1.5km, ~0.036° is ~4km,
+  // and ~0.072° is ~8km. Nothing here sits near the 5km boundary on purpose:
+  // a test that only passes because of rounding tells you nothing.
 
-  test('report_machine: 1.5km away with no accuracy returns ok (inside the widened radius)', LONG, async () => {
+  test('report_machine: 1.5km away with no accuracy returns ok', LONG, async () => {
     const result = await reportMachine(
       { machine: machineId, state: 'ok', lat: machineLat + 0.0135, lng: machineLng },
       '10.20.30.3',
@@ -158,9 +169,19 @@ if (!dockerAvailable()) {
     assert.equal(result, 'ok');
   });
 
-  test('report_machine: 5km away with no accuracy returns far', LONG, async () => {
+  test('report_machine: 4km away with no accuracy returns ok (inside the widened radius)', LONG, async () => {
+    // Would have been 'far' under the old 2km radius. This is the case the
+    // widening is for: reported on the way home from the shop.
     const result = await reportMachine(
-      { machine: machineId, state: 'ok', lat: machineLat + 0.045, lng: machineLng },
+      { machine: machineId, state: 'ok', lat: machineLat + 0.036, lng: machineLng },
+      '10.20.30.5',
+    );
+    assert.equal(result, 'ok');
+  });
+
+  test('report_machine: 8km away with no accuracy returns far', LONG, async () => {
+    const result = await reportMachine(
+      { machine: machineId, state: 'ok', lat: machineLat + 0.072, lng: machineLng },
       '10.20.30.4',
     );
     assert.equal(result, 'far');
@@ -219,11 +240,12 @@ if (!dockerAvailable()) {
     assert.equal(guardRows(target), '2:1', 'cf-connecting-ip decides; xff is ignored when it is present');
   });
 
-  test('report_machine: 5km away with acc:5000 (iOS approximate location) returns ok', LONG, async () => {
-    // ~5km north of the machine. slack = acc = 5000, so the far threshold is
-    // 500 + 5000 = 5500m — comfortably clears an actual ~5000m offset.
+  test('report_machine: 8km away with acc:5000 (iOS approximate location) returns ok', LONG, async () => {
+    // ~8km north of the machine — 'far' on its own, per the case above.
+    // slack = acc = 5000 pushes the threshold to 5000 + 5000 = 10000m, so
+    // this passes only because the accuracy radius is honoured.
     const result = await reportMachine(
-      { machine: machineId, state: 'ok', lat: machineLat + 0.045, lng: machineLng, acc: 5000 },
+      { machine: machineId, state: 'ok', lat: machineLat + 0.072, lng: machineLng, acc: 5000 },
       '10.20.30.2',
     );
     assert.equal(result, 'ok');

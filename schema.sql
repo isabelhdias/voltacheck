@@ -229,6 +229,9 @@ declare
   who_ip text;
   slack  double precision;
   n      integer;
+  -- How far from the machine a report is still treated as an observation of
+  -- it. A judgement call, not a finding — see docs/rate-limiting-plan.md.
+  radius constant double precision := 5000;
 begin
   if state not in ('ok','full','down') then
     return 'invalid';
@@ -243,12 +246,15 @@ begin
   who_ip := private.guard_hash('ip', ip);
   who    := private.guard_hash('dev', coalesce(nullif(device, ''), ip));
 
-  -- Proximity, 2 km. The point of this check was never to prove someone is
-  -- standing at the machine — it's to accept a fresh *observation*: someone
-  -- who just left the shop, reporting from the car park or a couple of
-  -- minutes down the road on foot or by car, while still rejecting a report
-  -- from across the region, which isn't an observation of this machine at
-  -- all. `acc` is the browser's own accuracy radius in metres, and it is
+  -- Proximity, 5 km (was 2 km). The point of this check was never to prove
+  -- someone is standing at the machine — it's to accept a fresh
+  -- *observation*: someone who just left the shop, reporting from the car
+  -- park or a few minutes down the road on foot or by car, while still
+  -- rejecting a report from across the region, which isn't an observation of
+  -- this machine at all. 5 km is still comfortably inside "the errand I am
+  -- on"; it is a different town only in the densest bits of Lisbon and
+  -- Porto, where the machine you actually used is the one you tapped.
+  -- `acc` is the browser's own accuracy radius in metres, and it is
   -- deliberately not capped: with iOS Precise Location off the radius is
   -- 1-20 km, and capping it would reject those people while stopping nobody
   -- who is lying — a liar picks the coordinates too. Missing coordinates are
@@ -258,7 +264,7 @@ begin
   -- costs nothing against anyone actually determined to lie.
   if lat is not null and lng is not null then
     slack := greatest(coalesce(acc, 0), 0);
-    if private.metres_between(lat, lng, m_lat, m_lng) > 2000 + slack then
+    if private.metres_between(lat, lng, m_lat, m_lng) > radius + slack then
       return 'far';
     end if;
   end if;
@@ -525,8 +531,13 @@ begin
    order by private.metres_between(submit_machine.lat, submit_machine.lng, m.lat, m.lng) asc
    limit 1;
 
-  -- 2 km, the same radius report_machine() treats as "near this machine".
-  -- Inside it, two machines really are almost always in one concelho.
+  -- 2 km, and deliberately not tied to report_machine()'s radius, which is
+  -- now 5 km: that one answers "did this person plausibly just see the
+  -- machine?", this one answers "are these two machines in the same
+  -- concelho?" — and inside 2 km they almost always are, while 5 km crosses
+  -- a boundary often enough to reintroduce the wrong-concelho bug this
+  -- fallback was narrowed to avoid. Matches suggestTown()'s default in
+  -- app/domain.js, which prefills the same field client-side.
   if v_town is null and n_metres is not null and n_metres <= 2000 then
     v_town := n_town;
   end if;

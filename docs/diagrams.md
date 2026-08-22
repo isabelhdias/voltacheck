@@ -130,7 +130,7 @@ flowchart TD
   fix --> rpc["rpc: public.report_machine(...)"]
   rpc --> valid{"known machine,<br/>valid status?"}
   valid -- no --> bad["'invalid' / 'unknown'"]
-  valid -- yes --> near{"within 2 km,<br/>plus the browser's own accuracy radius?"}
+  valid -- yes --> near{"within 5 km,<br/>plus the browser's own accuracy radius?"}
   near -- no --> far["'far'"]
   near -- yes --> rate{"rate limits:<br/>same machine again inside 10 min ·<br/>20/h or 60/day per device · 300/h per IP"}
   rate -- over --> stop["'cooldown' / 'flood'"]
