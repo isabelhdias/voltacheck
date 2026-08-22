@@ -57,6 +57,15 @@ Roadmap, in priority order:
    The grouping itself is `clusterize()` in `app/domain.js`, so a native port
    gets it too.
 
+9. **Admin dashboard and observability** — in progress on
+   `claude/admin-dashboard-observability-wnz91y`. A private `/admin/` panel
+   showing what the map's coverage actually looks like, what people do, and
+   what is failing, on telemetry stored in two tiers so it fits Supabase's
+   free tier. Read `docs/observability-plan.md` before touching any of it:
+   it carries the dashboard design, the arithmetic behind the storage, and
+   the login policy. Shipping in three commits — schema and server-side
+   counting, then `app/telemetry.js`, then the panel itself.
+
 The app is live and shared — the Supabase project exists, so local mode is
 now the fallback path, not the default.
 
@@ -131,7 +140,8 @@ reported.
   tunables (`STALE_AFTER`, `RECONFIRM_AFTER`, `LOOKBACK_H`, `MAX_PINS`,
   `CLUSTER_BELOW_ZOOM`/`CLUSTER_CELL_PX`/`CLUSTER_MIN` for the zoomed-out
   grouping, colours
-  including the `FADED`/`FADED_INK` pair for aged reports, labels).
+  including the `FADED`/`FADED_INK` pair for aged reports, labels, and the
+  telemetry knobs `RELEASE`/`TELEMETRY_FLUSH_MS`/`TRACE_SAMPLE`/`SLOW_SPAN_MS`).
   Isabel pastes her Supabase values in here, not in `index.html`.
 - `app/domain.js` — pure status/search logic (decay, how a decayed machine is
   painted, reconfirm threshold, town search, chain filtering, distance,
@@ -155,7 +165,14 @@ reported.
   the filter sheet (status checklist, chain chips, distance segmented
   control), the topbar filter bar and its per-filter chips, the count line,
   empty-state reset, toast.
-- `app/main.js` — wires the modules together and boots the app.
+- `app/telemetry.js` — spans, counters, histograms and logs for the admin
+  dashboard, in OpenTelemetry's data model without its SDK (which needs a
+  bundler and would cost 150 KB on a phone). Off unless the app is live —
+  local mode and PR previews send nothing — never throws into the app, and
+  sends nothing anyone typed: no cookies, no coordinates, no free text. The
+  one module everything may call and nothing may depend on.
+- `app/main.js` — wires the modules together and boots the app, and calls
+  `telemetry.start()` once live-or-local has been decided.
 - `seed/machines.js` — the generated `SEED` array (2,444 rows), imported by
   `app/store.js`. Don't edit it by hand: run `python3 tools/import_osm.py`.
 - `schema.sql` — Postgres schema for Supabase (machines, reports,
@@ -205,6 +222,9 @@ reported.
   into localStorage. Don't hand-crop replacements: re-run the script.
 - `test/vectors/*.json` — the language-agnostic contract `domain.js` is
   tested against; also the contract future native ports assert against.
+  `telemetry-envelope.json` is a different kind of vector: a real payload
+  captured from the browser, which the integration suite feeds to the real
+  `ingest_telemetry()`. Re-capture it, never hand-edit it.
 - `test/unit/domain.test.js` — loads the vectors and runs them through
   `domain.js` with `node --test`. No I/O, ~100ms.
 - `test/integration/` — `api.test.js` runs `app/api.js`'s paging and
@@ -216,8 +236,11 @@ reported.
   node runs the files in parallel and each tears down the other's
   database.
 - `test/e2e/` — Playwright specs driving the real `index.html` in Chromium.
-  Runs in local mode only; `fixtures.js` stubs `supabase-js` so it can never
-  reach the production database.
+  Runs in local mode; `fixtures.js` stubs `supabase-js` so it can never
+  reach the production database. The one exception is `telemetry.spec.js`,
+  which swaps in a fake in-memory client so the app goes *live* and its
+  telemetry switches on — every request to supabase.co is intercepted, and
+  the spec fails if one addresses anything but the ingest endpoint.
 - `.github/workflows/ci.yml` — runs unit, integration, and e2e tests on every
   push to `main`. The only feedback loop Isabel has, since she can't run
   anything locally — read as pass/fail on her phone.
@@ -231,7 +254,10 @@ reported.
   failed preview is a warning, never a blocked deploy: previewing a change
   must not be able to stop the live site shipping. Serves only
   `seed/machines.js`, not the CSV/SQL beside it — those are Supabase import
-  inputs, 486 KB, and nothing in the browser reads them.
+  inputs, 486 KB, and nothing in the browser reads them. It also stamps the
+  short commit sha into `RELEASE` in its *copy* of `app/config.js`, so the
+  dashboard can tell "this error started on Tuesday" from "this error has
+  always been there"; the repo's copy stays `"dev"`.
 
   **Pages source must be "GitHub Actions".** While it is set to "deploy
   from a branch", GitHub also runs its own `pages-build-deployment` on

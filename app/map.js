@@ -7,6 +7,7 @@
 import { MAX_PINS, GLYPH, CLUSTER_BELOW_ZOOM, CLUSTER_CELL_PX, CLUSTER_MIN } from './config.js';
 import * as store from './store.js';
 import { paintOf, filterByChain, filterByStatus, filterByDistance, sortByDistance, clusterize } from './domain.js';
+import * as tel from './telemetry.js';
 
 export var map = L.map("map", { zoomControl:false }).setView([38.7380, -9.1450], 13);
 
@@ -195,11 +196,18 @@ function zoomToCluster(g){
   }
 }
 
+// Timed because this is the one thing in the app that runs on every pan and
+// zoom, and the two halves cost very different amounts: clustering walks
+// every machine in the country, pins walk a viewport. Measured separately so
+// a change to either shows up as its own curve rather than an average of the
+// two.
 export function draw(){
-  var now = Date.now();
+  var t0 = Date.now();
+  var now = t0;
   var wanted = {};
+  var clustered = map.getZoom() < CLUSTER_BELOW_ZOOM;
 
-  if(map.getZoom() < CLUSTER_BELOW_ZOOM){
+  if(clustered){
     clustersOnScreen(now).forEach(function(g){
       if(g.count < CLUSTER_MIN){
         g.machines.forEach(function(m){ drawPin(m, now, wanted); });
@@ -219,4 +227,7 @@ export function draw(){
       delete markers[id];
     }
   });
+
+  tel.observe("map.render.duration", { mode: clustered ? "clusters" : "pins" },
+              Date.now() - t0);
 }

@@ -41,21 +41,29 @@ flowchart TD
   store["store.js<br/>state · localStorage"]
   domain["domain.js<br/>PURE — no DOM, no clock"]
   config["config.js<br/>keys · thresholds · labels"]
+  tel["telemetry.js<br/>spans · metrics · logs"]
   seed["seed/machines.js"]
 
-  main --> ui & map & api & store
-  ui --> map & api & store & domain
-  map --> store & domain
-  api --> store
+  main --> ui & map & api & store & tel
+  ui --> map & api & store & domain & tel
+  map --> store & domain & tel
+  api --> store & tel
   store --> seed
   domain --> config
+  tel --> config
 ```
 
-Every module reads `config.js`; only `domain.js`'s arrow is drawn, because
-that is the one that matters — the two decay thresholds. `domain.js` is the
-bottom of the graph on purpose: it depends on nothing else, so it can be
-lifted out and re-implemented in Swift or Kotlin without dragging the browser
-along. See `docs/domain-contract.md`.
+Every module reads `config.js`; only `domain.js`'s and `telemetry.js`'s
+arrows are drawn, because those are the ones that matter — the two decay
+thresholds, and whether telemetry is on at all. `domain.js` is the bottom of
+the graph on purpose: it depends on nothing else, so it can be lifted out and
+re-implemented in Swift or Kotlin without dragging the browser along. See
+`docs/domain-contract.md`.
+
+`telemetry.js` is the one module everything may call and nothing may depend
+on: it imports only `config.js`, exports no state anyone reads, and swallows
+its own errors. A module that four others call has to be unable to break any
+of them.
 
 ## 3. What happens when the page loads
 
@@ -67,7 +75,10 @@ sequenceDiagram
   participant S as store.js
   participant DB as Supabase
 
+  participant T as telemetry.js
+
   B->>M: module script runs
+  M->>T: open the app.boot span
   M->>A: connect()
   alt keys set and supabase-js loaded
     A->>DB: machines + reports from the last 72 h
@@ -80,7 +91,13 @@ sequenceDiagram
     M->>B: badge reads "modo local"
   end
   M->>B: count the filters, draw the pins
+  M->>T: start(live) — on only if live, then close app.boot
 ```
+
+`start()` is what decides whether a single byte is ever sent, and it runs
+*after* the live-or-local branch above. Local mode and PR previews take the
+same path and send nothing, which is what keeps the dashboard's numbers the
+live site's.
 
 ## 4. The decay clock
 
@@ -201,14 +218,10 @@ in place and kept forever — they do not grow with traffic. Individual
 records are kept only for what has to be an individual, and only for a
 fortnight.
 
-This is the server half, which is what exists today: the two write guards
-count their own outcomes, and a rollup snapshots the numbers that would be
-expensive to rebuild later. The browser half — spans, logs and latency from
-real phones — arrives with `app/telemetry.js`, and this diagram grows an arm
-when it does.
-
 ```mermaid
 flowchart TD
+  app["app/telemetry.js<br/>off unless live · no cookies · no coordinates"]
+  app -->|"compact envelope, on hidden / pagehide / 15 s"| ing
   rep["public.report_machine()"] --> note["private.note_outcome()"]
   sub["public.submit_machine()"] --> note
   ing["public.ingest_telemetry()<br/>anonymous, rate limited, registry-checked"] --> note2["private.note / gauge / observe"]

@@ -3,6 +3,12 @@
 // regression here — that local mode never calls the Geolocation API, even
 // when permission is already granted. A phone-sized viewport, since that is
 // the real target device for this check.
+//
+// Telemetry belongs to the same family of promises and is asserted here for
+// the same reason: local mode and PR previews must send nothing at all. A
+// preview that could post to the live project would put unreviewed branches'
+// numbers into the dashboard, and `app/config.js` still carries real
+// credentials for anyone running the app straight from a clone.
 import { test, expect, gotoApp, centerPin } from './fixtures.js';
 
 test.use({ viewport: { width: 390, height: 844 } });
@@ -68,5 +74,34 @@ test.describe('local mode', () => {
     await expect(page.locator('#s-state')).toContainText('Avariada');
     expect(await page.evaluate(() => localStorage.getItem('centimo.did'))).toBeNull();
     expect(supabaseRequests, supabaseRequests.join(' | ')).toEqual([]);
+  });
+
+  // app/telemetry.js is a no-op unless connect() reported live. This asserts
+  // it from the outside: not "the flag is false" but "no request to the
+  // ingest endpoint was ever made", which is the thing that actually matters.
+  test('sends no telemetry: local mode never posts to ingest_telemetry', async ({ page }) => {
+    const posts = [];
+    page.on('request', (r) => {
+      if (r.url().includes('ingest_telemetry')) posts.push(r.url());
+    });
+
+    await gotoApp(page);
+
+    // Do the things that record telemetry — open a sheet, report a status,
+    // change a filter — then force the flush the app would do on hide.
+    const box = await centerPin(page);
+    if (box) {
+      await page.mouse.click(box.x, box.y);
+      await page.waitForTimeout(400);
+      const choice = page.locator('.choice').first();
+      if (await choice.isVisible()) {
+        await choice.click();
+        await page.waitForTimeout(400);
+      }
+    }
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await page.waitForTimeout(600);
+
+    expect(posts, `telemetry leaked in local mode: ${posts.join(', ')}`).toHaveLength(0);
   });
 });

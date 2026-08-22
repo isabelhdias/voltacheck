@@ -72,6 +72,16 @@ jobs:
           cp index.html _site/
           cp -r app _site/
           cp seed/machines.js _site/seed/
+
+          # Stamp the release into the copy, never into the repo. RELEASE is
+          # the only thing that tells "this error started on Tuesday" from
+          # "this error has always been there" on the admin dashboard, and a
+          # committed sha would be one commit stale the moment it landed.
+          # Previews are left as "dev" — they send no telemetry at all, since
+          # the two values below get blanked.
+          sed -i -E "s|^(export const RELEASE[[:space:]]*=[[:space:]]*)\".*\";|\\1\"${GITHUB_SHA:0:7}\";|" _site/app/config.js
+          grep -E '^export const RELEASE' _site/app/config.js
+
           echo "Live site:"; du -sh _site
 
           # The production values, taken from main rather than hardcoded

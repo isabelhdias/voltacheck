@@ -9,6 +9,7 @@ import {
 } from './domain.js';
 import { map, draw, filtered } from './map.js';
 import { getFix, pushReport } from './api.js';
+import * as tel from './telemetry.js';
 
 /* ───────── sheet ───────── */
 
@@ -37,12 +38,19 @@ function stampAt(ts, now){
 }
 
 export function select(id){
+  // select() is also how the sheet is *refreshed* — after a locate, after a
+  // report, after a foreground pull — so counting every call would put the
+  // top of the report funnel several times higher than the number of people
+  // who actually opened a machine. closeSheet() clears store.selected, so
+  // "different from what was already selected" is exactly "newly opened".
+  var reopened = store.selected !== id;
   store.setSelected(id);
   var m = store.find(id);
   if(!m) return;
 
   var now = Date.now();
   var p = paintOf(m, now), r = latest(m);
+  if(reopened) tel.count("sheet.open", { state: p.tone });
 
   document.getElementById("s-name").textContent = m.name;
 
@@ -292,6 +300,11 @@ export function buildStatusList(){
       var next = cur.indexOf(key) !== -1
         ? cur.filter(function(s){ return s !== key; })
         : cur.concat([key]);
+      // Which way it went is the interesting half: everything starts on, so
+      // an "off" is someone hiding a state and an "on" is them putting it
+      // back. Counting only the taps would make those indistinguishable.
+      tel.count("filter.status",
+                { status: key, state: next.length < cur.length ? "off" : "on" });
       // All four off is indistinguishable from a blank map and no one means
       // it; treat clearing the last one as clearing the filter.
       store.setActiveStatuses(next.length ? next : STATUS_KEYS.slice());
@@ -326,6 +339,7 @@ export function buildChainChips(){
     n.textContent = c.count;
     btn.appendChild(n);
     btn.addEventListener("click", function(){
+      if(store.activeChain !== c.chain) tel.count("filter.chain", { chain: c.chain });
       store.setActiveChain(store.activeChain === c.chain ? null : c.chain);
       afterFilterChange();
     });
@@ -366,6 +380,7 @@ export function buildRadius(){
 // app that reaches for geolocation. "Todas" never asks: it needs no
 // position, and asking would be a prompt for nothing.
 function pickRadius(metres){
+  tel.count("filter.distance", { km: metres === null ? "todas" : String(metres / 1000) });
   if(metres === null || store.userPos){
     store.setActiveRadius(metres);
     afterFilterChange();
@@ -430,6 +445,10 @@ var qInput = document.getElementById("q");
 var qResults = document.getElementById("results");
 
 function goToTown(g){
+  // Counted here rather than on every keystroke: this is a concelho that
+  // exists and was chosen, so the dimension stays bounded to the 308 real
+  // ones. Nothing anybody types is ever sent.
+  tel.count("search.town", { town: g.town });
   closeSheet();
   qInput.value = g.town;
   qInput.blur();
@@ -542,6 +561,7 @@ export function init(){
       if(!m) return;
 
       choiceBtns.forEach(function(b){ b.disabled = true; });
+      tel.count("report.tap", { status: btn.dataset.s });
 
       if(store.live) toast("A confirmar que estás junto à máquina…");
       var r = await pushReport(m.id, btn.dataset.s);

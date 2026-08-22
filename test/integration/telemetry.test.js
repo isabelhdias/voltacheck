@@ -23,7 +23,9 @@
 // package.json runs the integration layer with --test-concurrency=1.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { dockerAvailable, setup, teardown, BASE_URL, superuserScalar } from './docker-env.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { dockerAvailable, setup, teardown, BASE_URL, superuserScalar, ROOT } from './docker-env.js';
 
 const LONG = { timeout: 60_000 };
 const TOTAL_MACHINES = 2444;
@@ -277,6 +279,56 @@ if (!dockerAvailable()) {
     // running it twice must not double anything.
     superuserScalar('select private.telemetry_rollup_daily()');
     assert.equal(counter('machines.total'), TOTAL_MACHINES);
+  });
+
+  // ─────────────── what a real browser actually sends ───────────────
+
+  // The one test that joins the two halves. test/vectors/telemetry-envelope.json
+  // is captured from the real index.html by the e2e suite's fake-live fixture,
+  // never hand-written — so this fails the moment app/telemetry.js starts
+  // sending something the database would refuse, which is a failure nobody
+  // would otherwise see until the dashboard quietly stopped filling in.
+  test('the envelope a real browser produces is accepted whole', LONG, async () => {
+    const envelope = JSON.parse(
+      fs.readFileSync(path.join(ROOT, 'test/vectors/telemetry-envelope.json'), 'utf8'),
+    );
+    // Deltas, not absolutes: the cases above deliberately tripped every one
+    // of these counters already.
+    const before = {
+      unknown_metric: rejected('unknown_metric'),
+      bad_dims: rejected('bad_dims'),
+      bad_ids: rejected('bad_ids'),
+    };
+    // A fresh session id, so re-running the suite cannot trip the flush limit.
+    const result = await ingest({ ...envelope, sess: sess() }, '85.240.99.9');
+    assert.equal(result, 'ok', 'a captured real payload was not accepted whole');
+
+    assert.equal(rejected('unknown_metric'), before.unknown_metric,
+      'the app sent a metric the registry does not know');
+    assert.equal(rejected('bad_dims'), before.bad_dims,
+      'the app sent a dimension key the registry does not allow');
+    assert.equal(rejected('bad_ids'), before.bad_ids,
+      'the app sent a span the database could not decode');
+  });
+
+  // Both ends of db.pull.rows, which is the paging regression's alarm and the
+  // one counter whose value is neither small nor optional.
+  test('a full pull count survives, and a zero stays zero', LONG, async () => {
+    await ingest({
+      v: 1,
+      sess: sess(),
+      m: [
+        { n: 'db.pull.rows', d: { kind: 'machines' }, v: TOTAL_MACHINES },
+        { n: 'db.pull.rows', d: { kind: 'reports' }, v: 0 },
+      ],
+    }, '85.240.99.10');
+    // 2444 is well past the ceiling an earlier version of this clamped to.
+    // The captured envelope above also carries db.pull.rows, from a fixture
+    // with two machines, so this is the sum rather than a bare 2444.
+    assert.equal(counter('db.pull.rows', '{"kind":"machines"}'), TOTAL_MACHINES + 2);
+    // And a zero must not arrive as a one — "the pull returned no machines"
+    // is the alarm, so rounding it up would silence it.
+    assert.equal(counter('db.pull.rows', '{"kind":"reports"}'), 0);
   });
 
   // ───────────────────────── OTLP export ─────────────────────────

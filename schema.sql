@@ -668,7 +668,7 @@ insert into private.telemetry_metric (name, kind, dim_keys, source, about) value
   ('report.result',        'counter',   '{outcome}',        'client', 'what the phone saw come back — differs from reports.outcome when the network ate it'),
   ('search.town',          'counter',   '{town}',           'client', 'concelho searched, or sem-resultado'),
   ('filter.chain',         'counter',   '{chain}',          'client', 'chain chip tapped'),
-  ('filter.status',        'counter',   '{status}',         'client', 'status checkbox toggled on'),
+  ('filter.status',        'counter',   '{status,state}',   'client', 'a status checkbox toggled, and which way'),
   ('filter.distance',      'counter',   '{km}',             'client', 'distance segment picked'),
   ('locate.tap',           'counter',   '{outcome}',        'client', 'granted/denied/timeout/unavailable'),
   ('page.view',            'counter',   '{page}',           'client', 'app or admin')
@@ -1078,19 +1078,25 @@ begin
       perform private.note('telemetry.rejected', '{"reason":"dim_cardinality"}'::jsonb, 1);
       continue;
     end if;
-    -- A counter increment is a small positive integer. Absent means one —
-    -- most taps send no value at all. Present but not a number is malformed,
-    -- and is dropped rather than quietly counted as one: an ingest endpoint
-    -- that guesses is an ingest endpoint the dashboard cannot be read off.
-    -- The jsonb_typeof guard is also what keeps (item->>'v')::int from
-    -- throwing on a string and losing the whole flush.
+    -- Absent means one — most taps send no value at all. Present but not a
+    -- number is malformed, and is dropped rather than quietly counted as
+    -- one: an ingest endpoint that guesses is an ingest endpoint the
+    -- dashboard cannot be read off. The jsonb_typeof guard is also what
+    -- keeps (item->>'v')::int from throwing on a string and losing the whole
+    -- flush.
     if item ? 'v' and jsonb_typeof(item->'v') <> 'number' then
       dropped := dropped + 1;
       perform private.note('telemetry.rejected', '{"reason":"bad_value"}'::jsonb, 1);
       continue;
     end if;
+    -- Zero is a legitimate increment and must survive: db.pull.rows carrying
+    -- 0 is the paging regression's alarm going off. The ceiling is high for
+    -- the same metric from the other end — a full pull is 2.444 machines and
+    -- climbing, so a cap of 1000 would have quietly truncated every single
+    -- one. It bounds a number, not a row count; what actually costs space is
+    -- bounded by the registry and the per-metric dimension cap instead.
     n := case when jsonb_typeof(item->'v') = 'number'
-              then least(greatest((item->>'v')::int, 1), 1000) else 1 end;
+              then least(greatest((item->>'v')::int, 0), 1000000) else 1 end;
     perform private.note(reg.name, dims, n);
   end loop;
 

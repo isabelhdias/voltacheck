@@ -125,7 +125,7 @@ published at `/preview/pr-N/` with the database keys blanked.
 | | |
 |---|---|
 | `index.html` | markup + styles, one script tag |
-| `app/` | the modules: `domain` (pure logic), `store`, `api`, `map`, `ui`, `config`, `main` |
+| `app/` | the modules: `domain` (pure logic), `store`, `api`, `map`, `ui`, `telemetry`, `config`, `main` |
 | `seed/` | 2 444 machines, generated — as JS for the browser, CSV and SQL for Supabase |
 | `schema.sql` | tables, RLS, and the three functions that are the only way to write — reports, machine submissions, and telemetry |
 | `tools/` | the OpenStreetMap importer, the review-queue renderer, the screenshot script |
