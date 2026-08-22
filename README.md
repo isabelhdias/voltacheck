@@ -81,11 +81,16 @@ what you read here is what runs. Leaflet and supabase-js come from a CDN —
 that's the whole stack.
 
 Reports and machines live in a Supabase Postgres database, reached over
-PostgREST. Anonymous users have no INSERT anywhere: writes go through two
+PostgREST. Anonymous users have no INSERT anywhere: writes go through
 Postgres functions that rate-limit by device and IP, require a report to come
 from within 5 km of the machine, and hold new machines in a review queue until
-they're approved. A report with no position is refused — you can read the map
-without sharing your location, but not report with it switched off.
+they're approved. A report with no position at all is refused — you can read
+the map without sharing your location, but not report with it switched off.
+Each of those functions also counts what it decided, which is what the admin
+dashboard at `/admin/` is read off — coverage, the report funnel, latency and
+errors, on telemetry sized to fit Supabase's free tier. The panel is public
+HTML behind a database-side gate rather than a hidden URL; see
+[`docs/observability-plan.md`](docs/observability-plan.md).
 
 Leave the two values in `app/config.js` empty and the app falls back to
 **local mode** — the same seed data, reports kept in `localStorage`, no
@@ -113,7 +118,7 @@ browser.
 | Command | What it covers | Needs |
 |---|---|---|
 | `npm run test:unit` | `app/domain.js` against `test/vectors/*.json` — decay, search, distance | nothing, ~100 ms |
-| `npm run test:integration` | `app/api.js` and the SQL guards against a real Postgres + PostgREST | Docker |
+| `npm run test:integration` | `app/api.js` and the SQL guards — reports, submissions, telemetry ingest — against a real Postgres + PostgREST | Docker |
 | `npm run test:e2e` | the real `index.html` in Chromium, in local mode | `npx playwright install` |
 
 CI runs all three on every push and pull request, and each open PR is also
@@ -124,12 +129,13 @@ published at `/preview/pr-N/` with the database keys blanked.
 | | |
 |---|---|
 | `index.html` | markup + styles, one script tag |
-| `app/` | the modules: `domain` (pure logic), `store`, `api`, `map`, `ui`, `config`, `main` |
+| `app/` | the modules: `domain` (pure logic), `store`, `api`, `map`, `ui`, `telemetry`, `config`, `main` |
+| `admin/` | the private dashboard at `/admin/` — coverage, activity, the report funnel, errors and traces. English; gated by `public.is_admin()` in Postgres, not by the page |
 | `seed/` | 2 444 machines, generated — as JS for the browser, CSV and SQL for Supabase |
-| `schema.sql` | tables, RLS, and the two functions that are the only way to write |
+| `schema.sql` | tables, RLS, and the three functions that are the only way to write — reports, machine submissions, and telemetry |
 | `tools/` | the OpenStreetMap importer, the review-queue renderer, the screenshot script |
 | `test/` | vectors, unit, integration, e2e |
-| `docs/` | [architecture](docs/architecture.md) · [diagrams](docs/diagrams.md) · [domain contract](docs/domain-contract.md) · [rate limiting](docs/rate-limiting-plan.md) · [seed data](docs/seed-data-plan.md) · [Supabase setup](docs/supabase-setup.md) · [redesign](docs/redesign.md) · [branch protection](docs/branch-protection.md) |
+| `docs/` | [architecture](docs/architecture.md) · [diagrams](docs/diagrams.md) · [domain contract](docs/domain-contract.md) · [rate limiting](docs/rate-limiting-plan.md) · [observability](docs/observability-plan.md) · [seed data](docs/seed-data-plan.md) · [Supabase setup](docs/supabase-setup.md) · [redesign](docs/redesign.md) · [branch protection](docs/branch-protection.md) |
 
 Changing any of it? `CLAUDE.md` lists which of these docs — and which
 diagram — each kind of change has to update, in the same commit.

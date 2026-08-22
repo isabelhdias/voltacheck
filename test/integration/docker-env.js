@@ -21,6 +21,12 @@ const REST = 'voltacheck-it-rest';
 const PORT = 3999;
 export const BASE_URL = `http://127.0.0.1:${PORT}`;
 
+// Shared with admin.test.js, which mints its own tokens to exercise
+// public.is_admin(). A literal in two places would drift, and the failure
+// would look like "the gate refuses a valid admin" rather than "the secrets
+// disagree".
+export const JWT_SECRET = 'reallyreallyreallyreallyverysafesecret';
+
 const PG_IMAGE = 'postgres:16-alpine';
 const REST_IMAGE = 'postgrest/postgrest:v12.2.3';
 
@@ -126,7 +132,7 @@ export async function setup() {
       '-e', `PGRST_DB_URI=postgres://authenticator:pw@${PG}:5432/app`,
       '-e', 'PGRST_DB_SCHEMAS=public',
       '-e', 'PGRST_DB_ANON_ROLE=anon',
-      '-e', 'PGRST_JWT_SECRET=reallyreallyreallyreallyverysafesecret',
+      '-e', `PGRST_JWT_SECRET=${JWT_SECRET}`,
       // Mirrors Supabase's documented default row cap. Without this the
       // 1000-row pagination bug this suite exists to catch does not
       // reproduce, and the regression test below is theatre.

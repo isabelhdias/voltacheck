@@ -1,0 +1,140 @@
+{
+  "_note": "Captured from the real app by test/e2e/telemetry.spec.js's fixture: one visit, one machine opened, one report filed. Not hand-written. test/integration/telemetry.test.js feeds it to the real public.ingest_telemetry() and requires 'ok' — so if app/telemetry.js ever starts sending something the database refuses, CI says so. ingest_telemetry() ignores unknown top-level keys, including this one. Re-capture rather than edit by hand.",
+  "v": 1,
+  "sess": "8240329e-e48a-4b93-af93-66223cfdc32a",
+  "rel": "dev",
+  "mode": "live",
+  "m": [
+    {
+      "n": "db.pull.rows",
+      "d": {
+        "kind": "machines"
+      },
+      "v": 2
+    },
+    {
+      "n": "db.pull.rows",
+      "d": {
+        "kind": "reports"
+      },
+      "v": 0
+    },
+    {
+      "n": "page.view",
+      "d": {
+        "page": "app"
+      },
+      "v": 1
+    },
+    {
+      "n": "app.visit",
+      "d": {
+        "mode": "live"
+      },
+      "v": 1
+    },
+    {
+      "n": "app.session",
+      "d": {
+        "mode": "live"
+      },
+      "v": 1
+    },
+    {
+      "n": "sheet.open",
+      "d": {
+        "state": "stale"
+      },
+      "v": 1
+    },
+    {
+      "n": "report.tap",
+      "d": {
+        "status": "ok"
+      },
+      "v": 1
+    },
+    {
+      "n": "report.result",
+      "d": {
+        "outcome": "ok"
+      },
+      "v": 1
+    }
+  ],
+  "h": [
+    {
+      "n": "db.pull.duration",
+      "d": {
+        "kind": "machines"
+      },
+      "v": [
+        1
+      ]
+    },
+    {
+      "n": "db.pull.duration",
+      "d": {
+        "kind": "reports"
+      },
+      "v": [
+        0
+      ]
+    },
+    {
+      "n": "map.render.duration",
+      "d": {
+        "mode": "clusters"
+      },
+      "v": [
+        1,
+        0,
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "n": "app.boot.duration",
+      "d": {
+        "mode": "live"
+      },
+      "v": [
+        4.6
+      ]
+    },
+    {
+      "n": "db.rpc.duration",
+      "d": {
+        "outcome": "ok",
+        "rpc": "report_machine"
+      },
+      "v": [
+        0.6
+      ]
+    }
+  ],
+  "r": [
+    {
+      "k": "span",
+      "n": "app.boot",
+      "t": "124a7311556281af581df7e40b8aa42a",
+      "s": "55b50cacab830bdc",
+      "ms": 0,
+      "a": {
+        "app.mode": "live",
+        "otel.status_code": "ERROR"
+      }
+    },
+    {
+      "k": "log",
+      "n": "js.error",
+      "sev": 17,
+      "a": {
+        "exception.message": "probe",
+        "exception.file": "ui.js",
+        "exception.line": 42
+      }
+    }
+  ]
+}

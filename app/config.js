@@ -43,6 +43,31 @@ export const CLUSTER_CELL_PX = 80;
    empty for the towns that fell off the end. */
 export const PAGE = 1000;
 
+/* ───────── telemetry ─────────
+   The admin dashboard's numbers come from app/telemetry.js. It is off in
+   local mode and in PR previews (both have no Supabase values), so what the
+   dashboard shows is the live site and nothing else.
+
+   RELEASE is stamped with the short commit sha by .github/workflows/pages.yml
+   when it assembles the live site, and stays "dev" everywhere else. It is the
+   only way to tell "this error started after Tuesday" from "this error has
+   always been there". */
+export const RELEASE = "dev";
+
+/* How often a buffer of counters and spans is posted. Long enough that a
+   normal visit costs three or four requests, short enough that someone who
+   closes the tab mid-session is not lost — and the flush on `hidden` catches
+   most of those anyway. */
+export const TELEMETRY_FLUSH_MS = 15000;
+
+/* Head sampling for individual spans. Every span still feeds its histogram,
+   so latency is measured from 100% of visits; this only decides how many
+   traces are kept whole for the waterfall on the dashboard, and it is the
+   number that keeps the raw tier inside the free tier. Errors and anything
+   slower than SLOW_SPAN_MS are kept regardless. */
+export const TRACE_SAMPLE = 0.02;
+export const SLOW_SPAN_MS = 1500;
+
 export const LABEL = { ok:"A funcionar", full:"Cheia", down:"Avariada", stale:"Sem dados recentes" };
 // Must stay identical to --ok/--full/--down/--stale in index.html. These
 // paint the sheet's status pill, the filter chips and the checklist dots;
