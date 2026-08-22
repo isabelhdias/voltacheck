@@ -273,6 +273,47 @@ test.describe('admin panel', () => {
     await expect(screen).toContainText('app.boot');
   });
 
+  // ───────────────── when the panel itself is broken ─────────────────
+  //
+  // These are the tests for the failure mode that took a live debugging
+  // session to find: the login form used to be visible in the markup by
+  // default and the listeners were attached after the boot, so anything that
+  // threw on the way up left a page that looked completely normal and did
+  // nothing at all when tapped. No message, nowhere to look, on a phone with
+  // no console.
+
+  test('a module that throws says what threw, instead of showing a dead form', async ({ page }) => {
+    await page.route('**/supabase-js@2', (r) =>
+      r.fulfill({ contentType: 'application/javascript', body: fakeSupabase() })
+    );
+    // Break the panel the way a real fault would: an exception while the
+    // module is being evaluated.
+    await page.route('**/admin/main.js', (r) =>
+      r.fulfill({ contentType: 'application/javascript', body: 'throw new Error("boom from main.js");' })
+    );
+    await page.goto('/admin/index.html', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(600);
+
+    await expect(page.locator('#gate-err')).toContainText('boom from main.js');
+    // And no form that cannot possibly work.
+    await expect(page.locator('#login')).toBeHidden();
+  });
+
+  test('a module that never loads at all still says so', async ({ page }) => {
+    await page.route('**/supabase-js@2', (r) =>
+      r.fulfill({ contentType: 'application/javascript', body: fakeSupabase() })
+    );
+    // A 404 on a module script reports on the script element, not on window,
+    // so neither error handler fires — this is the case the watchdog exists
+    // for, and the one that would otherwise stay completely silent.
+    await page.route('**/admin/main.js', (r) => r.fulfill({ status: 404, body: '' }));
+    await page.goto('/admin/index.html', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(3000); // the watchdog waits 2s after load
+
+    await expect(page.locator('#gate-err')).toContainText('did not load');
+    await expect(page.locator('#login')).toBeHidden();
+  });
+
   // The PR-preview case: app/config.js blanked, so the panel has no project
   // to talk to and must say so rather than showing an empty dashboard.
   test('with no Supabase configured it explains itself instead of failing', async ({ page }) => {

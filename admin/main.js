@@ -13,6 +13,13 @@ import * as auth from './auth.js';
 import { TABS } from './screens.js';
 import * as api from './data.js';
 
+// Tells the watchdog in index.html that this module is running. It sits below
+// the imports because import declarations are hoisted and evaluated first
+// either way — so reaching this line means every module above resolved,
+// parsed and evaluated without throwing, which is exactly the thing the
+// watchdog cannot otherwise distinguish from a page that simply did nothing.
+document.documentElement.setAttribute("data-booted", "1");
+
 var gate     = document.getElementById("gate");
 var panel    = document.getElementById("panel");
 var errEl    = document.getElementById("gate-err");
@@ -38,25 +45,8 @@ function busy(form, on){
   if(b) b.disabled = on;
 }
 
-/* ───────── boot ───────── */
-
-var reason = auth.init();
-if(reason === "no-config"){
-  // The PR-preview case, and the "cloned it and blanked the keys" case. The
-  // panel cannot work without a project, and saying so beats an empty page.
-  show("login");
-  forms.login.hidden = true;
-  noteEl.textContent =
-    "No Supabase project configured — app/config.js is empty. " +
-    "PR previews always run like this, on purpose.";
-} else if(reason === "no-script"){
-  show("login");
-  forms.login.hidden = true;
-  noteEl.textContent = "Could not load supabase-js. Check the connection and reload.";
-} else {
-  route();
-}
-
+// Where the person is, turned into which card to show. Called on load and
+// again after each successful step.
 async function route(){
   try {
     var st = await auth.state();
@@ -207,4 +197,37 @@ function buildTabs(){
         '</p></div>';
     }
   }
+}
+
+/* ───────── boot ─────────
+   Deliberately last. The listeners above are attached before anything that
+   can throw, because they used to be attached after: auth.init() ran first,
+   unguarded, and if it threw the module died before reaching a single
+   addEventListener. The login form was visible in the markup by default, so
+   the result was a page that looked completely normal and did nothing at all
+   when you tapped Sign in — no message, nowhere to look. Whatever fails now,
+   the form still works and something says why. */
+
+try {
+  var reason = auth.init();
+  if(reason === "no-config"){
+    // The PR-preview case, and the "cloned it and blanked the keys" case. The
+    // panel cannot work without a project, and saying so beats an empty page.
+    show("login");
+    forms.login.hidden = true;
+    noteEl.textContent =
+      "No Supabase project configured — app/config.js is empty. " +
+      "PR previews always run like this, on purpose.";
+  } else if(reason === "no-script"){
+    show("login");
+    forms.login.hidden = true;
+    noteEl.textContent = "Could not load supabase-js. Check the connection and reload.";
+  } else {
+    route();
+  }
+} catch(err){
+  show("login");
+  forms.login.hidden = true;
+  noteEl.textContent = "The panel could not start.";
+  fail(err);
 }

@@ -345,6 +345,21 @@ update private.admins set require_aal2 = false where email = '...';
 — but that leaves the password as the only thing standing between the
 internet and the dashboard, so put it back when you can.
 
+### If the page does nothing when you tap Sign in
+
+It will now tell you why, in red under the button. That was not always true:
+the login form used to be visible in the markup by default and the button's
+listener was attached after the start-up code ran, so anything that threw on
+the way up left a page that looked entirely normal and did nothing at all
+when tapped — no message, and no console to look in on a phone.
+
+Whatever the red line says is the fault. Two of them mean something specific:
+
+- **"The panel's code did not load."** — a file is missing or was served
+  wrong. Reload; if it persists, the Pages deploy is the place to look.
+- **"No Supabase project configured"** — you are on a PR preview, not the
+  live site. Previews blank the keys on purpose. Check the URL.
+
 ### If you are locked out
 
 Nothing here can lock you out of the *data* — the Supabase dashboard always
