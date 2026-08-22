@@ -36,7 +36,7 @@ the two config values and the whole app still works, offline, on one device.
 flowchart TD
   main["main.js<br/>boot · wiring"]
   ui["ui.js<br/>sheet · search · filters"]
-  map["map.js<br/>Leaflet · pins · culling"]
+  map["map.js<br/>Leaflet · pins · clusters · culling"]
   api["api.js<br/>Supabase reads/writes"]
   store["store.js<br/>state · localStorage"]
   domain["domain.js<br/>PURE — no DOM, no clock"]

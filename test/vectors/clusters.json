@@ -1,0 +1,138 @@
+{
+  "description": "clusterize(machines, zoom, cellPx) groups machines into a square grid measured in screen pixels, so the same cellPx covers a smaller piece of the world at every step of zoom. Projection is Web Mercator (EPSG:3857) over a 256 px tile — Leaflet's default CRS — because the grid has to line up with what is actually drawn. One entry per occupied cell: its key, the cell's column and row (cellX/cellY, which a renderer needs to keep a drawn bubble inside its own cell so two bubbles cannot overlap), how many machines fell in it, their arithmetic-mean position, and the machines themselves in the order they were given. A cell holding a single machine still comes back as a group (count 1); the caller draws those as ordinary pins, so a lone machine never becomes a bubble reading '1'. Groups are returned sorted by key, which makes the output deterministic for a given input — the order is lexicographic on the key string 'zoom:cellX:cellY' and carries no geographic meaning. Cell keys are asserted here so a Swift/Kotlin port lands on the same grid rather than a half-cell-offset one; centroids are plain arithmetic and exact, not trig, so they are compared exactly.",
+  "constants": {
+    "tilePx": 256
+  },
+  "clusterizeCases": [
+    {
+      "id": "no-machines-no-groups",
+      "description": "Nothing to group. An empty map is empty, not a group of zero.",
+      "zoom": 10,
+      "cellPx": 64,
+      "machines": [],
+      "expectedGroups": []
+    },
+    {
+      "id": "a-lone-machine-is-a-group-of-one",
+      "description": "A single machine still comes back as a group, with count 1 and its own position. This is what lets the caller draw it as a normal status pin instead of a bubble saying '1' — a machine on its own out in the country keeps telling you whether it works.",
+      "zoom": 6,
+      "cellPx": 64,
+      "machines": [
+        { "id": "lisboa-baixa", "lat": 38.7223, "lng": -9.1393 }
+      ],
+      "expectedGroups": [
+        { "key": "6:121:98", "cellX": 121, "cellY": 98, "count": 1, "ids": ["lisboa-baixa"], "lat": 38.7223, "lng": -9.1393 }
+      ]
+    },
+    {
+      "id": "neighbours-merge-when-zoomed-out",
+      "description": "Two machines about 80 m apart. At zoom 10 a 64 px cell is several kilometres wide, so they share one cell and the group counts both. Its position is their midpoint.",
+      "zoom": 10,
+      "cellPx": 64,
+      "machines": [
+        { "id": "lisboa-baixa", "lat": 38.7223, "lng": -9.1393 },
+        { "id": "lisboa-a-rua-ao-lado", "lat": 38.723, "lng": -9.139 }
+      ],
+      "expectedGroups": [
+        {
+          "key": "10:1944:1569", "cellX": 1944, "cellY": 1569,
+          "count": 2,
+          "ids": ["lisboa-baixa", "lisboa-a-rua-ao-lado"],
+          "lat": 38.72265,
+          "lng": -9.13915
+        }
+      ]
+    },
+    {
+      "id": "the-same-pair-splits-when-zoomed-in",
+      "description": "The same two machines at zoom 18, where a 64 px cell is about 30 m across. They no longer share a cell, so they come back as two groups of one — the zoom dependence is the whole point: grouping must dissolve into individual machines as you go in.",
+      "zoom": 18,
+      "cellPx": 64,
+      "machines": [
+        { "id": "lisboa-baixa", "lat": 38.7223, "lng": -9.1393 },
+        { "id": "lisboa-a-rua-ao-lado", "lat": 38.723, "lng": -9.139 }
+      ],
+      "expectedGroups": [
+        { "key": "18:497667:401782", "cellX": 497667, "cellY": 401782, "count": 1, "ids": ["lisboa-baixa"], "lat": 38.7223, "lng": -9.1393 },
+        { "key": "18:497668:401780", "cellX": 497668, "cellY": 401780, "count": 1, "ids": ["lisboa-a-rua-ao-lado"], "lat": 38.723, "lng": -9.139 }
+      ]
+    },
+    {
+      "id": "a-wider-cell-merges-the-same-pair-again",
+      "description": "Same pair, same zoom 18, but a 512 px cell — proof cellPx is honoured and not a constant baked into the projection.",
+      "zoom": 18,
+      "cellPx": 512,
+      "machines": [
+        { "id": "lisboa-baixa", "lat": 38.7223, "lng": -9.1393 },
+        { "id": "lisboa-a-rua-ao-lado", "lat": 38.723, "lng": -9.139 }
+      ],
+      "expectedGroups": [
+        {
+          "key": "18:62208:50222", "cellX": 62208, "cellY": 50222,
+          "count": 2,
+          "ids": ["lisboa-baixa", "lisboa-a-rua-ao-lado"],
+          "lat": 38.72265,
+          "lng": -9.13915
+        }
+      ]
+    },
+    {
+      "id": "groups-and-singles-coexist",
+      "description": "Three machines in Lisbon and one in Porto at zoom 10: one group of three and one group of one. Order is by key, which puts the Lisbon cell first here — lexicographic, not geographic. The centroid is the mean of all three Lisbon positions, not of the cell.",
+      "zoom": 10,
+      "cellPx": 64,
+      "machines": [
+        { "id": "lisboa-baixa", "lat": 38.7223, "lng": -9.1393 },
+        { "id": "lisboa-a-rua-ao-lado", "lat": 38.723, "lng": -9.139 },
+        { "id": "porto", "lat": 41.1496, "lng": -8.6109 },
+        { "id": "lisboa-terceira", "lat": 38.7241, "lng": -9.1401 }
+      ],
+      "expectedGroups": [
+        {
+          "key": "10:1944:1569", "cellX": 1944, "cellY": 1569,
+          "count": 3,
+          "ids": ["lisboa-baixa", "lisboa-a-rua-ao-lado", "lisboa-terceira"],
+          "lat": 38.72313333333333,
+          "lng": -9.139466666666667
+        },
+        { "key": "10:1950:1533", "cellX": 1950, "cellY": 1533, "count": 1, "ids": ["porto"], "lat": 41.1496, "lng": -8.6109 }
+      ]
+    },
+    {
+      "id": "distant-machines-never-merge",
+      "description": "Lisbon and Porto at zoom 6, where a 64 px cell is over 100 km wide — still two cells, because 275 km apart is 275 km apart. Here the key order puts Porto first: further north is a smaller cellY, and '95' sorts before '98'.",
+      "zoom": 6,
+      "cellPx": 64,
+      "machines": [
+        { "id": "lisboa-baixa", "lat": 38.7223, "lng": -9.1393 },
+        { "id": "porto", "lat": 41.1496, "lng": -8.6109 }
+      ],
+      "expectedGroups": [
+        { "key": "6:121:95", "cellX": 121, "cellY": 95, "count": 1, "ids": ["porto"], "lat": 41.1496, "lng": -8.6109 },
+        { "key": "6:121:98", "cellX": 121, "cellY": 98, "count": 1, "ids": ["lisboa-baixa"], "lat": 38.7223, "lng": -9.1393 }
+      ]
+    },
+    {
+      "id": "input-order-does-not-change-the-grouping",
+      "description": "The same four machines as 'groups-and-singles-coexist', shuffled. The same cells come back in the same order, because the order is the sorted key — only the machines inside a group follow the order they were given. A caller reconciling markers against this list can rely on it not jumping around between draws.",
+      "zoom": 10,
+      "cellPx": 64,
+      "machines": [
+        { "id": "porto", "lat": 41.1496, "lng": -8.6109 },
+        { "id": "lisboa-terceira", "lat": 38.7241, "lng": -9.1401 },
+        { "id": "lisboa-baixa", "lat": 38.7223, "lng": -9.1393 },
+        { "id": "lisboa-a-rua-ao-lado", "lat": 38.723, "lng": -9.139 }
+      ],
+      "expectedGroups": [
+        {
+          "key": "10:1944:1569", "cellX": 1944, "cellY": 1569,
+          "count": 3,
+          "ids": ["lisboa-terceira", "lisboa-baixa", "lisboa-a-rua-ao-lado"],
+          "lat": 38.72313333333333,
+          "lng": -9.139466666666667
+        },
+        { "key": "10:1950:1533", "cellX": 1950, "cellY": 1533, "count": 1, "ids": ["porto"], "lat": 41.1496, "lng": -8.6109 }
+      ]
+    }
+  ]
+}

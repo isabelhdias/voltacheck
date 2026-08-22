@@ -5,7 +5,7 @@
 // all 2.444 are "stale". That isn't a test artefact — it mirrors production
 // today (docs/seed-data-plan.md) — and it's what makes "turn off the only
 // non-empty bucket" a realistic case rather than a contrived one.
-import { test, expect, gotoApp, centerPin } from './fixtures.js';
+import { test, expect, gotoApp, centerPin, zoomToCountry } from './fixtures.js';
 
 test.use({ viewport: { width: 834, height: 1112 } });
 
@@ -19,14 +19,9 @@ async function openFilters(page) {
   await expect(sheet(page)).toBeVisible();
 }
 
-async function zoomToCountry(page) {
-  await page.mouse.move(417, 556);
-  for (let i = 0; i < 7; i++) {
-    await page.mouse.wheel(0, 400);
-    await page.waitForTimeout(150);
-  }
-  await page.waitForTimeout(400);
-}
+// Zoomed out, machines are drawn as counted bubbles rather than pins, so
+// "is there anything on the map" has to count both.
+const marks = (page) => page.locator('.pin, .cluster');
 
 test.describe('filter bar', () => {
   test('starts clean: no chips, no badge, no clear, and a live count', async ({ page }) => {
@@ -80,18 +75,18 @@ test.describe('status filter', () => {
   test('turning off the only non-empty bucket empties the map and offers a way back', async ({ page }) => {
     await gotoApp(page);
     await zoomToCountry(page);
-    expect(await page.locator('.pin').count()).toBeGreaterThan(0);
+    expect(await marks(page).count()).toBeGreaterThan(0);
 
     await openFilters(page);
     await statusRow(page, 'Sem dados').click();
     await page.click('#filters-apply');
 
-    await expect(page.locator('.pin')).toHaveCount(0);
+    await expect(marks(page)).toHaveCount(0);
     await expect(page.locator('#empty')).toBeVisible();
 
     await page.click('#empty-clear');
     await expect(page.locator('#empty')).toBeHidden();
-    expect(await page.locator('.pin').count()).toBeGreaterThan(0);
+    expect(await marks(page).count()).toBeGreaterThan(0);
   });
 
   // All four off is indistinguishable from a blank map and nobody means it,

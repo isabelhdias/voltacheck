@@ -269,6 +269,20 @@
   .pin[data-s="down"][data-faded="1"]{background:var(--down-faded);color:var(--down-deep);border-color:var(--down)}
   .pin.is-sel{transform:scale(1.27);box-shadow:0 6px 14px rgba(20,32,46,.34);z-index:9999}
 
+  /* Zoomed out, machines are grouped into one bubble per patch of screen,
+     carrying how many are in it. Neutral on purpose: a group holds machines
+     in every state at once, so any status colour here would claim something
+     nobody reported. Grey is already taken ("never reported"), hence --ink. */
+  .cluster{
+    display:grid;place-items:center;border-radius:99px;
+    background:var(--ink);color:var(--paper);
+    border:3px solid #fff;box-shadow:0 3px 8px rgba(20,32,46,.3);
+    line-height:1;font-weight:800;font-variant-numeric:tabular-nums;
+  }
+  .cluster[data-size="s"]{width:32px;height:32px;font-size:12px}
+  .cluster[data-size="m"]{width:40px;height:40px;font-size:13px}
+  .cluster[data-size="l"]{width:48px;height:48px;font-size:13.5px}
+
   .fabs{
     position:absolute;right:12px;z-index:600;
     bottom:calc(var(--sheet-h) + env(safe-area-inset-bottom) + 16px);

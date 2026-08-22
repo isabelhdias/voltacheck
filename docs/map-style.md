@@ -72,7 +72,9 @@ Beyond that, exact control means vector tiles: MapLibre GL with a custom
 style over a source such as OpenFreeMap (no key, no registration, no rate
 limits, commercial use allowed, self-hostable). That replaces Leaflet, so
 `app/map.js` is rewritten end to end — pins, viewport culling, the
-`MAX_PINS` cap, selection. Its own piece of work.
+`MAX_PINS` cap, the zoomed-out cluster bubbles, selection. Its own piece of
+work. (`clusterize()` itself would survive: it is pure grid maths in
+`app/domain.js` and knows nothing about Leaflet.)
 
 ## A trap worth remembering
 
