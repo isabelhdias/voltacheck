@@ -20,7 +20,7 @@ go stale.
     <td width="50%"><img src="docs/images/sheet.jpg" alt="Bottom sheet for a Pingo Doce machine: full, 4 hours ago, timestamped &quot;Último report: 21/08, 11:05&quot;, asking &quot;Ainda está assim?&quot;"></td>
   </tr>
   <tr>
-    <td><b>The map.</b> One pin per machine, coloured by its last report. Grey means nobody has said anything recently.</td>
+    <td><b>The map.</b> One pin per machine, coloured by its last report. Grey means nobody has said anything recently. Zoom out and machines group into counted bubbles instead — the whole country at once, without a wall of pins.</td>
     <td><b>A machine.</b> Its state, how old that is, the last few reports — and three buttons to say what you just saw.</td>
   </tr>
   <tr>

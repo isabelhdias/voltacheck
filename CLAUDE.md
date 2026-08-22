@@ -46,6 +46,11 @@ Roadmap, in priority order:
    `submit_machine()` stores what was typed. It used to derive the concelho
    from the nearest machine at any distance, which filed the first real
    submission 18.8 km away under the wrong one.
+8. ~~Group the pins when zoomed out~~ — done. Below zoom 13 the map draws one
+   counted bubble per patch of screen instead of a pin per machine, which
+   also retired the quiet lie in the `MAX_PINS` cap: the country view used to
+   show 400 machines while the count line said 2.444. The grouping itself is
+   `clusterize()` in `app/domain.js`, so a native port gets it too.
 
 The app is live and shared — the Supabase project exists, so local mode is
 now the fallback path, not the default.
@@ -105,6 +110,10 @@ Only `paintOf()` keeps the hue, and it marks what it returns `faded`.
 
 This decay is the point of the product. Don't add anything that makes a stale
 report look fresh — a faded pin must never be mistakable for a solid one.
+The zoomed-out cluster bubbles obey the same rule from the other side: they
+are `--ink` and a number, never a status colour, because a group holds
+machines in every state at once and colouring it would claim a status nobody
+reported.
 
 ## Files
 
@@ -114,12 +123,14 @@ report look fresh — a faded pin must never be mistakable for a solid one.
   `<script type="module" src="app/main.js">` that loads the app. No inline
   app logic lives here any more.
 - `app/config.js` — `SUPABASE_URL` / `SUPABASE_ANON_KEY` and the other
-  tunables (`STALE_AFTER`, `RECONFIRM_AFTER`, `LOOKBACK_H`, colours including
-  the `FADED`/`FADED_INK` pair for aged reports, labels).
+  tunables (`STALE_AFTER`, `RECONFIRM_AFTER`, `LOOKBACK_H`, `MAX_PINS`,
+  `CLUSTER_BELOW_ZOOM`/`CLUSTER_CELL_PX` for the zoomed-out grouping, colours
+  including the `FADED`/`FADED_INK` pair for aged reports, labels).
   Isabel pastes her Supabase values in here, not in `index.html`.
 - `app/domain.js` — pure status/search logic (decay, how a decayed machine is
   painted, reconfirm threshold, town search, chain filtering, distance,
-  status filtering, concelho suggestion). No
+  status filtering, concelho suggestion, and `clusterize()`, the screen-pixel
+  grid the zoomed-out map groups machines into). No
   `document`/`window`/`localStorage`/`navigator`/`fetch` — this is the spec
   an iOS/Android port would mirror, and what `node --test` unit-tests
   directly.
@@ -131,7 +142,9 @@ report look fresh — a faded pin must never be mistakable for a solid one.
 - `app/api.js` — Supabase reads and writes (`connect`, `pull`, `pushReport`,
   `pushMachine`, `getFix`), and the PostgREST paging.
 - `app/map.js` — Leaflet init, pins, viewport culling (preferring the
-  machines nearest `store.userPos` when trimming the list).
+  machines nearest `store.userPos` when trimming the list), and the counted
+  bubbles it draws below `CLUSTER_BELOW_ZOOM` instead of pins — each one kept
+  inside its own grid cell so two can never overlap.
 - `app/ui.js` — the bottom sheet (including the distance line), town search,
   the filter sheet (status checklist, chain chips, distance segmented
   control), the topbar filter bar and its per-filter chips, the count line,

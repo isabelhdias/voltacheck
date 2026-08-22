@@ -246,3 +246,66 @@ export function filterByDistance(machines, from, metres){
     return metresBetween(from.lat, from.lng, m.lat, m.lng) <= metres;
   });
 }
+
+/* ───────── agrupamento ───────── */
+
+// Where a point lands on the world in pixels, at a given zoom. Web Mercator
+// (EPSG:3857) with a 256 px tile, which is exactly what Leaflet's default CRS
+// uses — so a cell of `cellPx` here is `cellPx` on screen at every zoom, and
+// the grid moves with the map instead of being a fixed number of degrees that
+// would be wide in the north and narrow in the south.
+//
+// Latitude is clamped to Mercator's limit so the log never blows up; nothing
+// in Portugal is near it, but a total function is one less thing for a port
+// to get wrong.
+function pixelXY(lat, lng, zoom){
+  var size = 256 * Math.pow(2, zoom);
+  var phi = Math.sin(toRad(Math.max(-85.05112878, Math.min(85.05112878, lat))));
+  return {
+    x: (lng + 180) / 360 * size,
+    y: (0.5 - Math.log((1 + phi) / (1 - phi)) / (4 * Math.PI)) * size
+  };
+}
+
+// Machines grouped into a square screen-pixel grid: one entry per occupied
+// cell, carrying how many machines fell in it, where their middle is, and
+// which cell it is — the caller needs the cell to keep a bubble inside it,
+// which is what stops two bubbles overlapping.
+//
+// Zoomed out, a pin per machine is a wall of overlapping colour that says
+// nothing — and the MAX_PINS cap that kept it drawable dropped the rest in
+// silence, so the map showed 400 of 2.444 while the count line said 2.444. A
+// counted bubble says the true number instead of hiding it.
+//
+// Single machines come back as groups of one on purpose: the caller draws
+// those as ordinary pins, so a lone machine in the Alentejo still shows its
+// status at country zoom rather than becoming a bubble reading "1".
+//
+// Sorted by key so the same input always yields the same order — the caller
+// reconciles markers against it, and a port's test can compare arrays.
+export function clusterize(machines, zoom, cellPx){
+  var cell = cellPx > 0 ? cellPx : 64;
+  var cells = {}, keys = [];
+
+  (machines || []).forEach(function(m){
+    if(!m) return;
+    var p = pixelXY(m.lat, m.lng, zoom);
+    var key = zoom + ":" + Math.floor(p.x / cell) + ":" + Math.floor(p.y / cell);
+    if(!cells[key]){ cells[key] = []; keys.push(key); }
+    cells[key].push(m);
+  });
+
+  return keys.sort().map(function(key){
+    var group = cells[key], parts = key.split(":"), lat = 0, lng = 0;
+    group.forEach(function(m){ lat += m.lat; lng += m.lng; });
+    return {
+      key: key,
+      cellX: Number(parts[1]),
+      cellY: Number(parts[2]),
+      lat: lat / group.length,
+      lng: lng / group.length,
+      count: group.length,
+      machines: group
+    };
+  });
+}

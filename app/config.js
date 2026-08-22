@@ -12,9 +12,23 @@ export const KEY = "centimo.v2";
 export const DID_KEY = "centimo.did";
 
 /* With ~2.400 máquinas on the map, one marker each is more DOM than a phone
-   can pan smoothly. Draw only what is on screen, and cap it — zoomed out to
-   the whole country, a few thousand pins say nothing anyway. */
+   can pan smoothly. Draw only what is on screen, and cap it. Since clustering
+   took over below CLUSTER_BELOW_ZOOM this cap only bites from zoom 13 up,
+   where a padded viewport rarely holds anywhere near 400 machines. */
 export const MAX_PINS = 400;
+
+/* Zoomed out, a pin per machine was a wall of overlapping colour that said
+   nothing, and MAX_PINS quietly dropped the rest — the country view showed
+   400 of 2.444 while the count line said 2.444. Below this zoom the map
+   groups machines into counted bubbles instead, which hides nothing.
+   13 is the zoom the app opens on, so the view you land on is all pins. */
+export const CLUSTER_BELOW_ZOOM = 13;
+
+/* The grid a bubble covers, in screen pixels at any zoom. Comfortably wider
+   than the widest bubble (48 px): each bubble is kept inside its own cell, so
+   the wider the cell, the freer a bubble is to sit over its machines instead
+   of being nudged toward the middle. */
+export const CLUSTER_CELL_PX = 80;
 
 /* PostgREST caps how many rows one request returns (1000 on Supabase by
    default), and there are ~2.400 machines. Without paging, live mode would

@@ -27,6 +27,7 @@ import {
   sortByDistance,
   filterByStatus,
   statusCounts,
+  clusterize,
 } from '../../app/domain.js';
 import { STALE_AFTER, RECONFIRM_AFTER, HOUR } from '../../app/config.js';
 
@@ -301,6 +302,54 @@ test('paintOf.faded and statusOf agree on the threshold', () => {
       paintOf(machine, c.now).faded,
       stale && hasReport,
       `${c.id}: paintOf and statusOf disagree about whether this report has aged out`,
+    );
+  }
+});
+
+/* ───────── clusters.json: clusterize ───────── */
+
+test('clusterize — one entry per occupied cell, counted and centred', () => {
+  const { constants, clusterizeCases } = loadVector('clusters.json');
+  assert.equal(constants.tilePx, 256, 'the vectors assume a 256 px tile, as Leaflet does');
+  assert.ok(clusterizeCases.length > 0, 'vector file has no cases');
+
+  for (const c of clusterizeCases) {
+    const got = clusterize(c.machines, c.zoom, c.cellPx);
+    const where = `${c.id}: ${c.description}`;
+
+    assert.equal(got.length, c.expectedGroups.length, `${where} (group count)`);
+    got.forEach((g, i) => {
+      const want = c.expectedGroups[i];
+      assert.equal(g.key, want.key, `${where} (group ${i} cell key)`);
+      assert.equal(g.cellX, want.cellX, `${where} (group ${i} cell column)`);
+      assert.equal(g.cellY, want.cellY, `${where} (group ${i} cell row)`);
+      assert.equal(g.count, want.count, `${where} (group ${i} count)`);
+      assert.deepEqual(g.machines.map((m) => m.id), want.ids, `${where} (group ${i} members)`);
+      assert.equal(g.lat, want.lat, `${where} (group ${i} centroid lat)`);
+      assert.equal(g.lng, want.lng, `${where} (group ${i} centroid lng)`);
+    });
+  }
+});
+
+// Nothing may be silently dropped: a bubble's number is the only thing
+// telling you how many machines are under it, so every machine handed in has
+// to come back in exactly one group. This is the property the old MAX_PINS
+// cap broke — it showed 400 of 2.444 and said nothing about the rest.
+test('clusterize — every machine lands in exactly one group', () => {
+  const { clusterizeCases } = loadVector('clusters.json');
+
+  for (const c of clusterizeCases) {
+    const groups = clusterize(c.machines, c.zoom, c.cellPx);
+    const seen = groups.flatMap((g) => g.machines.map((m) => m.id));
+    assert.deepEqual(
+      seen.slice().sort(),
+      c.machines.map((m) => m.id).sort(),
+      `${c.id}: a machine went missing or was counted twice`,
+    );
+    assert.equal(
+      groups.reduce((n, g) => n + g.count, 0),
+      c.machines.length,
+      `${c.id}: the counts do not add up to the machines given`,
     );
   }
 });

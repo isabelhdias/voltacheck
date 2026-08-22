@@ -17,7 +17,8 @@ about when a report goes stale, the app lies to someone.
 - **Small surface.** `statusOf`, `paintOf`, `needsReconfirm`, `ago`, `norm`,
   `groupTowns`, `townsMatching`, `filterByChain`, `chainCounts`, `latest`,
   `metresBetween`, `formatDistance`, `sortByDistance`, `filterByStatus`,
-  `statusCounts`. A port only needs to match these fifteen functions and the
+  `statusCounts`, `filterByDistance`, `suggestTown`, `knownTowns`,
+  `clusterize`. A port only needs to match these nineteen functions and the
   two thresholds they read from `app/config.js`: `STALE_AFTER` (18h) and
   `RECONFIRM_AFTER` (3h).
 
@@ -48,6 +49,7 @@ Files:
 | `chains.json` | `chainCounts` (ordering, "Outras" last) and `filterByChain` |
 | `distance.json` | `metresBetween` (haversine, against real reference distances), `formatDistance` (pt-PT rounding and the metre/km bucket boundaries), `sortByDistance` (nearest-first, the no-position case) |
 | `status-filter.json` | `filterByStatus` (statuses-to-keep against `statusOf`, the empty-list-matches-nothing rule) and `statusCounts` (per-status bucket counts, independent of any filter) |
+| `clusters.json` | `clusterize` — the screen-pixel grid a zoomed-out map groups machines into: which cell a machine lands in at a given zoom and cell size, the counted group that comes back, and the rule that a cell holding one machine is still a group |
 
 Each file carries the relevant threshold constants as data (e.g.
 `staleAfterMs`, `reconfirmAfterMs`, `hourMs`, `dayMs`) under a top-level
@@ -131,8 +133,8 @@ and a filter from telling one person two different stories.
    free upgrade to every port's test suite).
 2. For each file, assert the `"constants"` block against your own
    threshold constants before iterating cases.
-3. Iterate `cases` (or the named case arrays in `search.json` /
-   `chains.json`) and assert your implementation's output against the
+3. Iterate `cases` (or the named case arrays in `search.json`,
+   `chains.json`, `clusters.json`, …) and assert your implementation's output against the
    `expected*` field(s), using the `id`/`description` as the assertion
    message so a failure names the exact scenario.
 4. For `reconfirm.json`, implement the prompt as the three-part composition
@@ -146,6 +148,14 @@ and a filter from telling one person two different stories.
   "há 24 h" instead of "há 1 d". Not wrong per the current formula, but
   worth a deliberate look before three platforms independently decide
   whether to preserve it.
+- `clusterize()`'s group order is the JavaScript sort of the cell key
+  string, `"zoom:cellX:cellY"` — so `"10:1944:1569"` sorts before
+  `"10:1950:1533"` character by character, and the order is not
+  north-to-south or west-to-east. Any port that sorts numerically by cell
+  column and row instead will disagree with `clusters.json` on the order
+  (never on the grouping). The order only has to be *stable*, so a port that
+  deliberately picks another one should say so and adjust its own
+  expectations rather than leave the difference implicit.
 - `chainCounts()`'s tie-breaking (chains with equal counts) depends on
   JavaScript's stable sort plus `Object.keys` insertion order, i.e. which
   chain's first machine appears earliest in the input array. That's a

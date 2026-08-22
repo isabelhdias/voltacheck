@@ -73,6 +73,25 @@ export async function expectLocalMode(page) {
   await expect(page.locator('#mode')).toHaveText('modo local');
 }
 
+// Wheels the map out from the default zoom 13 to roughly country level, where
+// the map groups machines into counted bubbles instead of drawing a pin each.
+// Shared because more than one spec needs the zoomed-out map, and they must
+// agree on what "zoomed out" means.
+export async function zoomToCountry(page) {
+  await page.mouse.move(417, 556);
+  for (let i = 0; i < 7; i++) {
+    await page.mouse.wheel(0, 400);
+    await page.waitForTimeout(150);
+  }
+  await page.waitForTimeout(400);
+}
+
+// The zoom Leaflet is actually on. The app's modules are already loaded, so
+// importing map.js in the page hands back the same live instance.
+export function mapZoom(page) {
+  return page.evaluate(() => import('/app/map.js').then((m) => m.map.getZoom()));
+}
+
 // Finds the on-screen pin nearest the viewport centre, clear of the topbar
 // and the bottom sheet, and returns click coordinates for it (or null).
 export async function centerPin(page) {
