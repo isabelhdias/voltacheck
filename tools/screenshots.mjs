@@ -166,6 +166,25 @@ const run = async () => {
   await page.waitForTimeout(3000);
   await shot('map.jpg');
 
+  // The same map zoomed out to the whole country, where machines are grouped
+  // into counted bubbles instead of a pin each. Shot here, between the two
+  // street-level views, so it is the real transition and not a mock-up.
+  await page.evaluate(async () => {
+    const m = await import('/app/map.js');
+    m.map.setView([39.6, -8.2], 7);
+    m.draw();
+  });
+  await page.waitForTimeout(3000);
+  await shot('clusters.jpg');
+
+  // Back to street level for everything below, so those shots are unchanged.
+  await page.evaluate(async () => {
+    const m = await import('/app/map.js');
+    m.map.setView([38.7365, -9.1435], 15);
+    m.draw();
+  });
+  await page.waitForTimeout(2000);
+
   await page.evaluate(async () => {
     const ui = await import('/app/ui.js');
     ui.select('osm-13722146779');

@@ -20,25 +20,26 @@ go stale.
     <td width="50%"><img src="docs/images/sheet.jpg" alt="Bottom sheet for a Pingo Doce machine: full, 4 hours ago, timestamped &quot;Último report: 21/08, 11:05&quot;, asking &quot;Ainda está assim?&quot;"></td>
   </tr>
   <tr>
-    <td><b>The map.</b> One pin per machine, coloured by its last report. Grey means nobody has said anything recently. Zoom out and machines group into counted bubbles instead — the whole country at once, without a wall of pins.</td>
+    <td><b>The map.</b> One pin per machine, coloured by its last report. Grey means nobody has said anything recently.</td>
     <td><b>A machine.</b> Its state, how old that is, the last few reports — and three buttons to say what you just saw.</td>
   </tr>
   <tr>
+    <td><img src="docs/images/clusters.jpg" alt="The whole of mainland Portugal, machines grouped into dark bubbles carrying counts — 607 around Lisbon, 361 around Porto — with one lone green pin near Guarda"></td>
     <td><img src="docs/images/filters.jpg" alt="Filter sheet with status checklist, supermarket chips and a distance control"></td>
-    <td><img src="docs/images/search.jpg" alt="Search box showing concelhos matching &quot;vila&quot;, with machine counts"></td>
   </tr>
   <tr>
+    <td><b>Zoomed out.</b> Machines group into counted bubbles, so the whole country fits without a wall of overlapping pins. A bubble is neutral on purpose — it holds machines in every state at once. Tap one to open it up; anywhere too sparse to crowd keeps its own pin.</td>
     <td><b>Filters.</b> By state, by supermarket, by distance from you. They compose, and the counts tell you what a tap would reveal before you make it.</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/search.jpg" alt="Search box showing concelhos matching &quot;vila&quot;, with machine counts"></td>
+    <td><img src="docs/images/add.jpg" alt="The add-machine form: name, chain, concelho, address and note"></td>
+  </tr>
+  <tr>
     <td><b>Search.</b> Type a concelho — accents optional — and the map frames its machines.</td>
+    <td><b>Adding one.</b> Drag the map until the machine is in the circle and describe it. Submissions go to a review queue, not straight onto the map.</td>
   </tr>
 </table>
-
-<p align="center">
-  <img src="docs/images/add.jpg" width="300" alt="The add-machine form: name, chain, concelho, address and note">
-</p>
-
-**Adding one.** Drag the map until the machine is in the circle and describe
-it. Submissions go to a review queue, not straight onto the map.
 
 <sub>Screenshots are the real app running in local mode against the seed data,
 with a set of demo reports — the live map's colours depend on who reported
