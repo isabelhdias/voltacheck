@@ -45,6 +45,29 @@ test.describe('filter bar', () => {
     await page.keyboard.press('Escape');
     await expect(sheet(page)).toBeHidden();
   });
+
+  // The regression the test above kept half-catching. openFilters() unhides
+  // the sheet and only adds `open` on the next animation frame, so the CSS
+  // transition has a from-state. A close landing inside that window removes
+  // `open` before the frame runs; the frame then puts it back, and
+  // closeFilters()'s timeout checks for `open` before hiding anything, so it
+  // declines — leaving the sheet visible with nothing pending to close it.
+  //
+  // Driven through the module rather than through taps, because the window is
+  // one frame wide: a click-then-Escape hits it only sometimes, which is
+  // exactly how it showed up — as an Escape test that passed locally and
+  // failed in CI.
+  test('a close landing inside the open animation frame still closes', async ({ page }) => {
+    await gotoApp(page);
+    await page.evaluate(async () => {
+      const ui = await import('/app/ui.js');
+      ui.openFilters();
+      ui.closeFilters();
+    });
+    await page.waitForTimeout(800); // well past closeFilters()'s 240ms
+    await expect(sheet(page)).toBeHidden();
+    await expect(page.locator('#filterbtn')).toHaveAttribute('aria-expanded', 'false');
+  });
 });
 
 test.describe('status filter', () => {

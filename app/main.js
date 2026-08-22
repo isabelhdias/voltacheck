@@ -8,9 +8,15 @@ import { CHAINS } from './config.js';
 import { suggestTown, knownTowns } from './domain.js';
 import { map, draw, setOnSelect } from './map.js';
 import * as ui from './ui.js';
+import * as tel from './telemetry.js';
 
 setOnSelect(ui.select);
 ui.init();
+
+// Opened here rather than inside connect() so it covers the whole boot, not
+// just the database part: this is the span that answers "how long until
+// there is a map", which is the only latency question a phone user has.
+var boot = tel.span("app.boot");
 
 function goLocal(msg){
   store.setLive(false);
@@ -23,7 +29,7 @@ function goLocal(msg){
 }
 
 async function connect(){
-  var result = await api.connect();
+  var result = await api.connect(boot);
   if(result.live){
     var badge = document.getElementById("mode");
     badge.textContent = "em direto";
@@ -159,10 +165,15 @@ saveBtn.addEventListener("click", async function(){
 /* ───────── locate ───────── */
 
 document.getElementById("locate").addEventListener("click", function(){
-  if(!navigator.geolocation){ ui.toast("Localização indisponível neste dispositivo"); return; }
+  if(!navigator.geolocation){
+    tel.count("locate.tap", { outcome:"unavailable" });
+    ui.toast("Localização indisponível neste dispositivo");
+    return;
+  }
   ui.toast("A procurar-te…");
 
   function found(p){
+    tel.count("locate.tap", { outcome:"granted" });
     store.setUserPos({ lat:p.coords.latitude, lng:p.coords.longitude });
     map.setView([p.coords.latitude, p.coords.longitude], 15);
     draw();
@@ -182,12 +193,19 @@ document.getElementById("locate").addEventListener("click", function(){
   // it gets its own message instead of the generic one.
   function retryCoarse(err){
     if(err && err.code === 1){
+      // Counted apart from a timeout on purpose: a refusal is a choice the
+      // person made, a timeout is the app failing them indoors. Treating
+      // both as "locate didn't work" would hide which one is happening.
+      tel.count("locate.tap", { outcome:"denied" });
       ui.toast("Localização bloqueada. Ativa-a nas definições do browser.");
       return;
     }
     navigator.geolocation.getCurrentPosition(
       found,
-      function(){ ui.toast("Não consegui obter a localização. Arrasta o mapa."); },
+      function(){
+        tel.count("locate.tap", { outcome:"timeout" });
+        ui.toast("Não consegui obter a localização. Arrasta o mapa.");
+      },
       { enableHighAccuracy:false, timeout:15000, maximumAge:300000 }
     );
   }
@@ -215,4 +233,12 @@ document.addEventListener("visibilitychange", async function(){
 connect().then(function(){
   ui.refreshFilters();
   draw();
+
+  // start() decides whether anything is ever sent — local mode and PR
+  // previews send nothing — and it comes before boot.end() so the boot span
+  // it just measured is in the first flush rather than the second.
+  tel.start(store.live);
+  var mode = store.live ? "live" : "local";
+  var ms = boot.end("ok", { "app.mode":mode, "app.machines":store.machines.length });
+  tel.observe("app.boot.duration", { mode:mode }, ms);
 });

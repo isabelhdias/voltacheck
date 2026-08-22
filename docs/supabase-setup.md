@@ -301,6 +301,67 @@ rate limiting is now load-bearing, and it is a speed bump rather than a wall.
 `docs/rate-limiting-plan.md` has an honest account of what it does and does not
 stop. Worth reading before the link goes anywhere public.
 
+## Setting up the admin dashboard
+
+The panel lives at `<the site>/admin/`. It is public HTML — the gate is
+`public.is_admin()` in the database, not the URL — so there is nothing to
+hide and nothing to configure beyond an account.
+
+**Steps 3 and 4 need `schema.sql` applied first**, because `private.admins`
+does not exist until it is: merge the change, then run the **Migrate**
+workflow, *then* do them. Steps 1 and 2 are Supabase settings and can be done
+whenever.
+
+1. **Authentication → Providers → Email**: turn **off** "Allow new users to
+   sign up". Supabase moves this around between dashboard versions — it has
+   also lived under **Authentication → Sign In / Providers → Email**, and the
+   toggle itself is sometimes worded "Enable sign ups". It is the
+   highest-value setting in the whole thing: with it off, nobody can create
+   an account at all, so the only credentials that matter are yours.
+2. **Authentication → Users → Add user**: your email and a password. (The
+   panel deliberately offers no sign-up — see step 1.)
+3. Open `/admin/` and sign in. It will tell you the account is not on the
+   admin list yet, and print the exact statement to run, with your user id
+   already filled in. Copy it into the SQL editor and run it once:
+
+   ```sql
+   insert into private.admins (uid, email)
+   values ('...', '...');
+   ```
+
+4. Reload. It now asks for a second factor: scan the QR code with any
+   authenticator app (or type the key it shows), then type the six digits
+   back. From then on, signing in is password + six digits.
+
+Why a second factor is not optional: `is_admin()` requires an `aal2` claim,
+which only a passed TOTP challenge produces, so somebody with your password
+still cannot read a single row. If enrolling turns out to be miserable on
+your phone, it can be relaxed for your row alone —
+
+```sql
+update private.admins set require_aal2 = false where email = '...';
+```
+
+— but that leaves the password as the only thing standing between the
+internet and the dashboard, so put it back when you can.
+
+### If you are locked out
+
+Nothing here can lock you out of the *data* — the Supabase dashboard always
+works, and it is where all of this is configured. If the panel refuses you,
+it is saying one of three things and the SQL editor can check each:
+
+```sql
+select * from private.admins;              -- is your uid on the list?
+select id, email from auth.users;          -- does it match your account's?
+select * from private.admin_access
+ order by at desc limit 20;                -- what did it last let through?
+```
+
+The commonest cause is an email change: the allowlist row records the email
+it was created with, and a token whose email no longer matches it is refused
+on purpose. Update the row.
+
 ## Reviewing machine submissions
 
 When someone adds a machine that isn't on the map yet, it doesn't go straight

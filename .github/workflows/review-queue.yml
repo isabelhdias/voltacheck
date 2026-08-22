@@ -58,3 +58,24 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: tools/review_queue.sh >> "$GITHUB_STEP_SUMMARY"
+
+      # Piggy-backing the dashboard's daily snapshot on this run rather than
+      # standing up pg_cron: this workflow already holds SUPABASE_DB_URL and
+      # already runs three times a day, and enabling an extension is one more
+      # thing that would have to be done by hand on a phone.
+      #
+      # The rollup is idempotent — the gauges overwrite and the day's
+      # counters are recomputed, not incremented — so running it three times
+      # is the same as running it once. It also prunes telemetry_raw past its
+      # retention window, which is the other reason it wants to run on a
+      # clock and not only when someone opens the app.
+      #
+      # `continue-on-error`: the review queue is the alert Isabel actually
+      # depends on, and it has already been posted by the time this runs. A
+      # telemetry snapshot failing must not turn that run red.
+      - name: Snapshot the dashboard's daily numbers
+        continue-on-error: true
+        run: |
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -q \
+            -c "select private.telemetry_rollup_daily()"
+          echo "Telemetry rollup done." >> "$GITHUB_STEP_SUMMARY"

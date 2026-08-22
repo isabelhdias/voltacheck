@@ -57,6 +57,17 @@ Roadmap, in priority order:
    The grouping itself is `clusterize()` in `app/domain.js`, so a native port
    gets it too.
 
+9. ~~Admin dashboard and observability~~ — done. A private `/admin/` panel,
+   in English, showing what the map's coverage actually looks like, what
+   people do, and what is failing. Telemetry is stored in two tiers so it
+   fits Supabase's free tier: aggregates upserted in place and kept forever,
+   individual records only for errors, slow spans and a 2% sample, pruned
+   after 14 days. The gate is `public.is_admin()` in Postgres — uid on an
+   allowlist, `aal2` in the token, email still matching — never the page,
+   which is public like the rest of the site. Read
+   `docs/observability-plan.md` before touching any of it: it carries the
+   design, the arithmetic behind the storage, and the login policy.
+
 The app is live and shared — the Supabase project exists, so local mode is
 now the fallback path, not the default.
 
@@ -82,8 +93,13 @@ now the fallback path, not the default.
   and picking a distance in the filter sheet. Never on load, never on
   opening a sheet. "Todas" does not ask, because it needs no position. See
   `docs/redesign.md`.
-- **UI copy is Portuguese** (pt-PT). Match the existing register — plain and
-  direct, not formal.
+- **The app's UI copy is Portuguese** (pt-PT). Match the existing register —
+  plain and direct, not formal. **The admin panel under `admin/` is English**,
+  including its number formatting (`2,444`, `14.1%`): the map is for people
+  standing in a supermarket in Portugal, the dashboard is for whoever
+  maintains it. Where the two meet — the outcome strings `report_machine()`
+  returns — each side translates for its own audience and the database keeps
+  the terse originals.
 - **Don't restyle.** Design tokens are CSS vars at the top of `index.html`:
   `--ink #14202E`, `--paper #F4F2EC`, `--azulejo #1F4FD8`, and status colours
   `--ok #12A05F`, `--full #E39B22`, `--down #DE4A3F`, `--stale #98A0AE`.
@@ -131,7 +147,8 @@ reported.
   tunables (`STALE_AFTER`, `RECONFIRM_AFTER`, `LOOKBACK_H`, `MAX_PINS`,
   `CLUSTER_BELOW_ZOOM`/`CLUSTER_CELL_PX`/`CLUSTER_MIN` for the zoomed-out
   grouping, colours
-  including the `FADED`/`FADED_INK` pair for aged reports, labels).
+  including the `FADED`/`FADED_INK` pair for aged reports, labels, and the
+  telemetry knobs `RELEASE`/`TELEMETRY_FLUSH_MS`/`TRACE_SAMPLE`/`SLOW_SPAN_MS`).
   Isabel pastes her Supabase values in here, not in `index.html`.
 - `app/domain.js` — pure status/search logic (decay, how a decayed machine is
   painted, reconfirm threshold, town search, chain filtering, distance,
@@ -155,15 +172,29 @@ reported.
   the filter sheet (status checklist, chain chips, distance segmented
   control), the topbar filter bar and its per-filter chips, the count line,
   empty-state reset, toast.
-- `app/main.js` — wires the modules together and boots the app.
+- `admin/` — the private dashboard, served at `/admin/`. `index.html`
+  (markup + styles), `auth.js` (password then TOTP), `data.js` (the five
+  read RPCs and the reshaping the charts want), `charts.js` (inline SVG —
+  no chart library), `screens.js` (the four screens), `main.js` (wiring).
+  **English, unlike the app.** It reads `../app/config.js`, so blanking the
+  Supabase values takes the panel offline with the app — which is what makes
+  a PR preview of it harmless.
+- `app/telemetry.js` — spans, counters, histograms and logs for the admin
+  dashboard, in OpenTelemetry's data model without its SDK (which needs a
+  bundler and would cost 150 KB on a phone). Off unless the app is live —
+  local mode and PR previews send nothing — never throws into the app, and
+  sends nothing anyone typed: no cookies, no coordinates, no free text. The
+  one module everything may call and nothing may depend on.
+- `app/main.js` — wires the modules together and boots the app, and calls
+  `telemetry.start()` once live-or-local has been decided.
 - `seed/machines.js` — the generated `SEED` array (2,444 rows), imported by
   `app/store.js`. Don't edit it by hand: run `python3 tools/import_osm.py`.
 - `schema.sql` — Postgres schema for Supabase (machines, reports,
-  machine_submissions) and its RLS policies. Anon reads machines and
-  reports and can call two functions — `report_machine()` and
-  `submit_machine()` — and has no direct write anywhere. Applied by the
-  Migrate workflow, not by hand; safe to re-run. Note the "Known gap"
-  comment at the bottom.
+  machine_submissions, and the `private` telemetry tables) and its RLS
+  policies. Anon reads machines and reports and can call three functions —
+  `report_machine()`, `submit_machine()` and `ingest_telemetry()` — and has
+  no direct write anywhere. Applied by the Migrate workflow, not by hand;
+  safe to re-run. Note the "Known gap" comment at the bottom.
 - `tools/import_osm.py` — the machine importer. Python 3 stdlib, no install.
   Run it to refresh the data; it rewrites `seed/`, including `seed/machines.js`
   directly.
@@ -172,6 +203,11 @@ reported.
 - `docs/seed-data-plan.md` — where the data comes from and how to refresh it.
 - `docs/rate-limiting-plan.md` — how report writes are guarded, and what that
   does and doesn't stop.
+- `docs/observability-plan.md` — the admin dashboard: what it shows, how the
+  telemetry is stored so it fits the free tier (the arithmetic is in there),
+  where the OpenTelemetry data model is kept and where the wire format
+  deliberately isn't, and the login policy. Read before touching anything
+  under `private.telemetry_*`.
 - `docs/supabase-setup.md` — the step-by-step for creating the project and
   going from local mode to shared. Written for an iPad; no CLI.
 - `docs/branch-protection.md` — why nothing pushes to `main` and the exact
@@ -195,22 +231,42 @@ reported.
   stack, the module graph, the boot sequence, the decay clock, and the paths
   a report and a submission each take. Renders inline on GitHub, phone
   included.
+- `docs/images/admin-*.jpg` — the three panel screenshots in
+  `docs/observability-plan.md`, generated by the same script with demo
+  numbers (the real ones are the live site's, and this repo is public).
 - `docs/images/*.jpg` — the README screenshots, including `clusters.jpg`,
   the country view the map draws as counted bubbles. Generated by
   `node tools/screenshots.mjs`, which drives the real `index.html` in
   Chromium in **local mode** (supabase-js stubbed exactly as the e2e suite
   does it, so it can never reach the live database) with demo reports seeded
   into localStorage. Don't hand-crop replacements: re-run the script.
+- `test/integration/admin.test.js` — mints real signed JWTs against the same
+  containers and walks every way past `public.is_admin()` that must not
+  work: no token, a stranger's session, the right uid at `aal1`, the right
+  uid with a changed email, a token signed with the wrong secret. This is
+  where the dashboard's security is actually tested; the Playwright spec
+  only covers what the panel *shows*.
 - `test/vectors/*.json` — the language-agnostic contract `domain.js` is
   tested against; also the contract future native ports assert against.
+  `telemetry-envelope.json` is a different kind of vector: a real payload
+  captured from the browser, which the integration suite feeds to the real
+  `ingest_telemetry()`. Re-capture it, never hand-edit it.
 - `test/unit/domain.test.js` — loads the vectors and runs them through
   `domain.js` with `node --test`. No I/O, ~100ms.
 - `test/integration/` — `api.test.js` runs `app/api.js`'s paging and
   `report_machine()` against real Postgres + PostgREST containers that
-  `docker-env.js` builds and tears down itself. Needs Docker.
+  `docker-env.js` builds and tears down itself; `telemetry.test.js` runs
+  `ingest_telemetry()` against the same pair, mostly testing what it
+  refuses. Needs Docker. Both files drive one set of fixed-name containers,
+  so `npm run test:integration` passes `--test-concurrency=1` — without it
+  node runs the files in parallel and each tears down the other's
+  database.
 - `test/e2e/` — Playwright specs driving the real `index.html` in Chromium.
-  Runs in local mode only; `fixtures.js` stubs `supabase-js` so it can never
-  reach the production database.
+  Runs in local mode; `fixtures.js` stubs `supabase-js` so it can never
+  reach the production database. The one exception is `telemetry.spec.js`,
+  which swaps in a fake in-memory client so the app goes *live* and its
+  telemetry switches on — every request to supabase.co is intercepted, and
+  the spec fails if one addresses anything but the ingest endpoint.
 - `.github/workflows/ci.yml` — runs unit, integration, and e2e tests on every
   push to `main`. The only feedback loop Isabel has, since she can't run
   anything locally — read as pass/fail on her phone.
@@ -224,7 +280,10 @@ reported.
   failed preview is a warning, never a blocked deploy: previewing a change
   must not be able to stop the live site shipping. Serves only
   `seed/machines.js`, not the CSV/SQL beside it — those are Supabase import
-  inputs, 486 KB, and nothing in the browser reads them.
+  inputs, 486 KB, and nothing in the browser reads them. It also stamps the
+  short commit sha into `RELEASE` in its *copy* of `app/config.js`, so the
+  dashboard can tell "this error started on Tuesday" from "this error has
+  always been there"; the repo's copy stays `"dev"`.
 
   **Pages source must be "GitHub Actions".** While it is set to "deploy
   from a branch", GitHub also runs its own `pages-build-deployment` on
@@ -240,7 +299,11 @@ reported.
   updates one labelled GitHub issue listing pending `machine_submissions`,
   and closes it when the queue empties. Silent when there's nothing
   waiting. Rendering lives in `tools/review_queue.sh` because the apply
-  workflow needs it too.
+  workflow needs it too. It also calls
+  `private.telemetry_rollup_daily()` — the dashboard's daily snapshot rides
+  along here rather than on pg_cron, because this workflow already holds
+  `SUPABASE_DB_URL` and enabling an extension is one more thing to do by
+  hand on a phone.
 - `.github/workflows/review-apply.yml` — turns a ticked checkbox in that
   issue into an approval or rejection, then redraws the issue. The one
   workflow reachable from a public event, so read its header comment
@@ -267,6 +330,9 @@ follow-up nobody gets to.
 | `domain.js`'s exported surface | `docs/domain-contract.md`, `docs/architecture.md`, `test/vectors/*.json` |
 | the boot path, or how live vs. local mode is decided | diagram 3, and "How it's built" in the README |
 | the guards in `report_machine()` or `submit_machine()` — limits, radius, return strings | diagram 5 or 6, `docs/rate-limiting-plan.md`, and "How it's built" in the README |
+| the telemetry tables, the metric registry, `ingest_telemetry()` or the retention windows | diagram 8, `docs/observability-plan.md` (including the free-tier arithmetic), and `test/integration/telemetry.test.js` |
+| `public.is_admin()`, `private.admins`, or any `admin_*` read function | diagram 9, the login section of `docs/observability-plan.md`, and `test/integration/admin.test.js` |
+| anything visible in the admin panel | re-run `node tools/screenshots.mjs` and commit the `docs/images/admin-*.jpg` it writes |
 | the moderation flow or the review-queue workflows | diagram 6 and `docs/supabase-setup.md` |
 | what CI, Pages or Migrate do | diagram 7, the test table in `docs/architecture.md`, and "Tests" in the README |
 | anything visible in the app's map, topbar, sheet, filters, search or add form — pins and cluster bubbles included | re-run `node tools/screenshots.mjs` and commit what it writes to `docs/images/` |

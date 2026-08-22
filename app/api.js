@@ -5,6 +5,7 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY, LOOKBACK_H, HOUR } from './config.js';
 import * as store from './store.js';
 import { deviceId } from './store.js';
+import * as tel from './telemetry.js';
 
 export var db = null;
 
@@ -25,21 +26,47 @@ export async function pageAll(build){
   }
 }
 
-export async function pull(){
+/* `parent` is optional and only ties this pull's spans into a bigger trace —
+   the boot sequence passes one, the foreground refresh doesn't and gets a
+   trace of its own. Row counts ride along as span attributes and as
+   db.pull.rows, which is the paging regression's own alarm: if a page cap
+   ever silently truncates the country again, the number on the dashboard
+   drops and says so. */
+export async function pull(parent){
   var since = new Date(Date.now() - LOOKBACK_H * HOUR).toISOString();
 
-  var mRows = await pageAll(function(){
-    return db.from("machines")
-             .select("id,name,lat,lng,town,chain,source")
-             .order("id", { ascending:true });
-  });
+  var mSpan = tel.span("db.pull", {
+    parent: parent, metric: "db.pull.duration", dims: { kind: "machines" } });
+  var mRows;
+  try {
+    mRows = await pageAll(function(){
+      return db.from("machines")
+               .select("id,name,lat,lng,town,chain,source")
+               .order("id", { ascending:true });
+    });
+  } catch(err){
+    mSpan.end("error", { "db.table": "machines" });
+    throw err;
+  }
+  mSpan.end("ok", { "db.table": "machines", "db.rows": mRows.length });
+  tel.count("db.pull.rows", { kind: "machines" }, mRows.length);
 
-  var rRows = await pageAll(function(){
-    return db.from("reports")
-             .select("machine_id,status,created_at")
-             .gte("created_at", since)
-             .order("created_at", { ascending:true });
-  });
+  var rSpan = tel.span("db.pull", {
+    parent: parent, metric: "db.pull.duration", dims: { kind: "reports" } });
+  var rRows;
+  try {
+    rRows = await pageAll(function(){
+      return db.from("reports")
+               .select("machine_id,status,created_at")
+               .gte("created_at", since)
+               .order("created_at", { ascending:true });
+    });
+  } catch(err){
+    rSpan.end("error", { "db.table": "reports" });
+    throw err;
+  }
+  rSpan.end("ok", { "db.table": "reports", "db.rows": rRows.length });
+  tel.count("db.pull.rows", { kind: "reports" }, rRows.length);
 
   var byId = {};
   mRows.forEach(function(x){
@@ -60,17 +87,25 @@ export async function pull(){
    script isn't available — a silent fallback to local mode — or "error" when
    the connection attempt itself failed, which the caller reports with a
    toast. */
-export async function connect(){
+export async function connect(parent){
   if(!SUPABASE_URL || !SUPABASE_ANON_KEY || !window.supabase){
     return { live:false, reason:"no-supabase" };
   }
+  var s = tel.span("db.connect", { parent:parent });
   try {
     db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    await pull();
+    await pull(parent);
     store.setLive(true);
+    s.end("ok");
     return { live:true, reason:null };
   } catch(err){
     store.setLive(false);
+    // The one failure that decides whether anyone sees a map at all, and
+    // until now it left no trace anywhere off the phone it happened on.
+    s.end("error");
+    tel.log(tel.SEV.ERROR, "db.connect.failed", {
+      "exception.message": err && err.message ? String(err.message) : "unknown",
+    });
     return { live:false, reason:"error" };
   }
 }
@@ -96,6 +131,12 @@ export function getFix(){
 export async function pushReport(machineId, status){
   if(!store.live) return "ok";                    // local mode: unchanged, and no geolocation prompt
   var f = await getFix();
+  // No `metric` on the span: the outcome is only known once the call
+  // returns, and db.rpc.duration is dimensioned by it — "how long does a
+  // rejection take" is a different question from "how long does a write
+  // take". So the span hands back its duration and it is observed once,
+  // with both dimensions.
+  var s = tel.span("db.rpc", {});
   var res = await db.rpc("report_machine", {
     machine: machineId,
     state:   status,
@@ -104,8 +145,14 @@ export async function pushReport(machineId, status){
     acc:     f ? f.acc : null,
     device:  deviceId()
   });
-  if(res.error) return "erro";
-  return res.data || "erro";
+  var outcome = res.error ? "erro" : (res.data || "erro");
+  // `geo.fix` is whether a position was attached at all, never the position.
+  // Coordinates never leave the phone through this module.
+  var ms = s.end(outcome === "erro" ? "error" : "ok",
+                 { "rpc.outcome":outcome, "geo.fix":!!f });
+  tel.observe("db.rpc.duration", { rpc:"report_machine", outcome:outcome }, ms);
+  tel.count("report.result", { outcome:outcome });
+  return outcome;
 }
 
 /* New machines no longer go straight into `machines` — they go through
@@ -121,6 +168,7 @@ export async function pushReport(machineId, status){
 export async function submitMachine(fields){
   if(!store.live) return "ok-local";
   var pos = store.userPos;
+  var s = tel.span("db.rpc", {});
   var res = await db.rpc("submit_machine", {
     name:     fields.name,
     chain:    fields.chain,
@@ -134,6 +182,8 @@ export async function submitMachine(fields){
     from_acc: null,
     device:   deviceId()
   });
-  if(res.error) return "erro";
-  return res.data || "erro";
+  var outcome = res.error ? "erro" : (res.data || "erro");
+  var ms = s.end(outcome === "erro" ? "error" : "ok", { "rpc.outcome":outcome });
+  tel.observe("db.rpc.duration", { rpc:"submit_machine", outcome:outcome }, ms);
+  return outcome;
 }
