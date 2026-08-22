@@ -46,6 +46,7 @@ const SERIES = [
   { d: today, m: 'report.result', k: { outcome: 'ok' }, v: 12, n: 0, p50: null, p95: null },
   { d: today, m: 'reports.outcome', k: { outcome: 'ok' }, v: 12, n: 0, p50: null, p95: null },
   { d: today, m: 'reports.outcome', k: { outcome: 'far' }, v: 5, n: 0, p50: null, p95: null },
+  { d: today, m: 'reports.outcome', k: { outcome: 'nopos' }, v: 3, n: 0, p50: null, p95: null },
   { d: today, m: 'locate.tap', k: { outcome: 'granted' }, v: 9, n: 0, p50: null, p95: null },
   { d: today, m: 'machines.new', k: { source: 'user' }, v: 1, n: 0, p50: null, p95: null },
   { d: today, m: 'app.boot.duration', k: { mode: 'live' }, v: 0, n: 40, p50: 500, p95: 2500 },
@@ -252,6 +253,11 @@ test.describe('admin panel', () => {
     await expect(screen).toContainText('Tapped a state');
     // The most actionable number in the whole dashboard.
     await expect(screen).toContainText('Too far away');
+    // And its neighbour since the proximity check stopped failing open: how
+    // many people are being turned away for sharing no location at all. An
+    // outcome with no entry in OUTCOME renders as the bare database string,
+    // which is how this one would quietly go unlabelled.
+    await expect(screen).toContainText('No location shared');
 
     // And the bars next to those numbers are actually drawn. They were not,
     // once: a percentage-width block in an auto-layout table cell collapsed

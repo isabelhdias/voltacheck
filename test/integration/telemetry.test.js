@@ -249,11 +249,23 @@ if (!dockerAvailable()) {
     const res = await fetch(`${BASE_URL}/rpc/report_machine`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '85.240.99.3' },
-      // Porto, comfortably more than 2km from any one machine.
+      // Porto, comfortably more than the 5km radius from that machine.
       body: JSON.stringify({ machine, state: 'ok', lat: 41.1579, lng: -8.6291, device: 'tel-far' }),
     });
     assert.equal(await res.json(), 'far');
     assert.equal(counter('reports.outcome', '{"outcome":"far"}'), far + 1);
+
+    // The other refusal the proximity rule makes, and the newer one: no
+    // coordinates at all. It has to be counted for the same reason 'far'
+    // does — it is how many people the rule is turning away.
+    const nopos = counter('reports.outcome', '{"outcome":"nopos"}');
+    const res2 = await fetch(`${BASE_URL}/rpc/report_machine`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '85.240.99.5' },
+      body: JSON.stringify({ machine, state: 'ok', device: 'tel-nopos' }),
+    });
+    assert.equal(await res2.json(), 'nopos');
+    assert.equal(counter('reports.outcome', '{"outcome":"nopos"}'), nopos + 1);
   });
 
   test('submit_machine counts every outcome it returns', LONG, async () => {

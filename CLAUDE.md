@@ -37,9 +37,10 @@ Roadmap, in priority order:
    table anon can neither read nor write. Isabel approves rows in the
    Supabase Table Editor and a trigger copies them into `machines`.
    Submitting needs no proximity (people map from home); *reporting* a
-   machine's state still does, now within 2 km. Approving is a checkbox in
-   the review-queue issue, not a trip to the Table Editor. See
-   `docs/supabase-setup.md`.
+   machine's state still does, now within 5 km — and a report with no
+   position at all is refused, where it used to be waved through. Approving
+   is a checkbox in the review-queue issue, not a trip to the Table Editor.
+   See `docs/supabase-setup.md`.
 7. ~~Set the machine's details instead of inferring them~~ — done. The form
    now asks for the concelho (prefilled from a machine within 2 km, and
    left blank when there is none) and an optional address, and
@@ -89,10 +90,13 @@ now the fallback path, not the default.
   the script holds `SUPABASE_URL` / `SUPABASE_ANON_KEY`. Filled, the app runs
   shared and shows an "em direto" badge; empty, it falls back to localStorage
   with seed data. Never break the empty case.
-- **Two taps may ask for location, and only those two:** the locate button,
-  and picking a distance in the filter sheet. Never on load, never on
-  opening a sheet. "Todas" does not ask, because it needs no position. See
-  `docs/redesign.md`.
+- **Three taps may ask for location, and only those three:** the locate
+  button, picking a distance in the filter sheet, and filing a report.
+  Never on load, never on opening a sheet. "Todas" does not ask, because it
+  needs no position. Reporting has always asked — `pushReport()` calls
+  `getFix()` — and it now *needs* the answer: a report with no coordinates
+  is refused (`nopos`) rather than accepted. This rule used to say "two",
+  which undercounted. See `docs/redesign.md`.
 - **The app's UI copy is Portuguese** (pt-PT). Match the existing register —
   plain and direct, not formal. **The admin panel under `admin/` is English**,
   including its number formatting (`2,444`, `14.1%`): the map is for people

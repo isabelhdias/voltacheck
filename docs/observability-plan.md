@@ -19,9 +19,12 @@ exists to close them:
    report inside `STALE_AFTER` is the one number that says whether the app
    is working, and nothing measures it.
 2. **Every rejected report is invisible.** `report_machine()` computes
-   `cooldown` / `flood` / `far` / `unknown` / `invalid` and then throws the
-   answer away. If the 2 km proximity rule is turning away real people, the
-   only evidence today would be someone complaining.
+   `cooldown` / `flood` / `far` / `nopos` / `unknown` / `invalid` and then
+   throws the answer away. If the proximity rule is turning away real
+   people, the only evidence today would be someone complaining. That got
+   sharper when the rule stopped failing open: `nopos` counts the people
+   refused for sharing no location at all, and it is counted client-side
+   too, because that refusal never reaches the database.
 3. **There is no local dev loop.** Isabel works from a phone; CI is
    pass/fail and the live site is a black box. Latency, JS errors and boot
    failures on real phones are unobservable.
@@ -51,7 +54,9 @@ dependencies" below.
 - The funnel: opened the map → opened a machine → tapped a state → the
   write was recorded, each step as a share of the one before it.
 - **Report outcomes**, broken out by the strings `report_machine()` returns.
-  The "too far away" rate is the most actionable number in the system.
+  The "too far away" rate is the most actionable number in the system, with
+  "no location shared" beside it — together they are the cost of the
+  proximity rule, and the pair to watch after any change to it.
 - Search and filter use: top concelhos searched, chains filtered, and locate
   taps with refusals told apart from timeouts.
 
@@ -246,9 +251,10 @@ English. The two are separate audiences and there is no reason to make the
 second read the first's language.
 
 Where the two meet, the panel translates: `report_machine()` returns
-`far`/`cooldown`/`flood` and the app maps those to its own Portuguese, while
-the panel maps the same strings to "Too far away", "Repeated too soon",
-"Too many". The database keeps the terse originals.
+`far`/`nopos`/`cooldown`/`flood` and the app maps those to its own
+Portuguese, while the panel maps the same strings to "Too far away", "No
+location shared", "Repeated too soon", "Too many". The database keeps the
+terse originals.
 
 ## What it looks like
 

@@ -82,9 +82,11 @@ that's the whole stack.
 
 Reports and machines live in a Supabase Postgres database, reached over
 PostgREST. Anonymous users have no INSERT anywhere: writes go through
-Postgres functions that rate-limit by device and IP, check proximity for a
-report, and hold new machines in a review queue until they're approved. Each
-of those functions also counts what it decided, which is what the admin
+Postgres functions that rate-limit by device and IP, require a report to come
+from within 5 km of the machine, and hold new machines in a review queue until
+they're approved. A report with no position at all is refused — you can read
+the map without sharing your location, but not report with it switched off.
+Each of those functions also counts what it decided, which is what the admin
 dashboard at `/admin/` is read off — coverage, the report funnel, latency and
 errors, on telemetry sized to fit Supabase's free tier. The panel is public
 HTML behind a database-side gate rather than a hidden URL; see

@@ -23,6 +23,9 @@ import {
   reapplySchema,
   reapplySeed,
 } from './docker-env.js';
+// Same haversine the database uses, term for term — see app/domain.js. Only
+// used here to keep the distance-based fixtures honest.
+import { metresBetween } from '../../app/domain.js';
 
 const LONG = { timeout: 60_000 };
 const TOTAL_MACHINES = 2444;
@@ -110,9 +113,16 @@ if (!dockerAvailable()) {
   });
 
   test('report_machine: from Porto coords returns far', LONG, async () => {
-    // Porto city centre — comfortably >2km from any single machine.
+    // Porto city centre — a different city from the fixture machine, which
+    // is the point of the case. Asserted rather than assumed: the fixture is
+    // whichever machine comes back first, and a fixture that happened to be
+    // in Porto would make this test pass for no reason.
+    const porto = { lat: 41.1579, lng: -8.6291 };
+    const away = metresBetween(porto.lat, porto.lng, machineLat, machineLng);
+    assert.ok(away > 5000, `fixture sanity: machine is ${Math.round(away)}m from Porto, needs to be >5000`);
+
     const result = await reportMachine(
-      { machine: machineId, state: 'ok', lat: 41.1579, lng: -8.6291 },
+      { machine: machineId, state: 'ok', ...porto },
       '85.240.10.7',
     );
     assert.equal(result, 'far');
@@ -134,23 +144,45 @@ if (!dockerAvailable()) {
     assert.equal(result, 'unknown');
   });
 
-  // Fail-open cases the rate limiter's design depends on. Distinct
-  // X-Forwarded-For values so these don't trip the cooldown set up by the
+  // The proximity check no longer fails open. It used to accept a report
+  // with no coordinates, which made it skippable by anyone who simply sent
+  // none — so these are the cases that keep it a check. Distinct
+  // X-Forwarded-For values so they don't trip the cooldown set up by the
   // "at the machine" test above, which used the same machine.
 
-  test('report_machine: no coordinates at all returns ok (fail open)', LONG, async () => {
+  test('report_machine: no coordinates at all returns nopos', LONG, async () => {
     const result = await reportMachine(
       { machine: machineId, state: 'ok' },
       '10.20.30.1',
     );
-    assert.equal(result, 'ok');
+    assert.equal(result, 'nopos');
   });
 
-  // The radius widened from 500m to 2km — see docs/rate-limiting-plan.md.
-  // ~0.0135° of latitude is ~1.5km, ~0.045° is ~5km (matches the Porto and
-  // 5km-with-approximate-fix cases above).
+  test('report_machine: latitude without longitude returns nopos', LONG, async () => {
+    // Half a position is no position. Rejected before the haversine, which
+    // would otherwise return null and let the > comparison pass as unknown.
+    const result = await reportMachine(
+      { machine: machineId, state: 'ok', lat: machineLat },
+      '10.20.30.6',
+    );
+    assert.equal(result, 'nopos');
+  });
 
-  test('report_machine: 1.5km away with no accuracy returns ok (inside the widened radius)', LONG, async () => {
+  test('report_machine: a rejected nopos writes no guard row and no report', LONG, async () => {
+    // Rejections are free, but they must also be silent: nothing counted,
+    // nothing stored. Otherwise a refused report would burn the reporter's
+    // own rate-limit quota.
+    const target = freshMachine();
+    assert.equal(await reportMachine({ machine: target.id, state: 'ok', device: 'nopos-guard' }), 'nopos');
+    assert.equal(guardRows(target.id), '0:0');
+  });
+
+  // The radius widened 500m → 2km → 5km — see docs/rate-limiting-plan.md.
+  // A degree of latitude is ~111km, so ~0.0135° is ~1.5km, ~0.036° is ~4km,
+  // and ~0.072° is ~8km. Nothing here sits near the 5km boundary on purpose:
+  // a test that only passes because of rounding tells you nothing.
+
+  test('report_machine: 1.5km away with no accuracy returns ok', LONG, async () => {
     const result = await reportMachine(
       { machine: machineId, state: 'ok', lat: machineLat + 0.0135, lng: machineLng },
       '10.20.30.3',
@@ -158,9 +190,19 @@ if (!dockerAvailable()) {
     assert.equal(result, 'ok');
   });
 
-  test('report_machine: 5km away with no accuracy returns far', LONG, async () => {
+  test('report_machine: 4km away with no accuracy returns ok (inside the widened radius)', LONG, async () => {
+    // Would have been 'far' under the old 2km radius. This is the case the
+    // widening is for: reported on the way home from the shop.
     const result = await reportMachine(
-      { machine: machineId, state: 'ok', lat: machineLat + 0.045, lng: machineLng },
+      { machine: machineId, state: 'ok', lat: machineLat + 0.036, lng: machineLng },
+      '10.20.30.5',
+    );
+    assert.equal(result, 'ok');
+  });
+
+  test('report_machine: 8km away with no accuracy returns far', LONG, async () => {
+    const result = await reportMachine(
+      { machine: machineId, state: 'ok', lat: machineLat + 0.072, lng: machineLng },
       '10.20.30.4',
     );
     assert.equal(result, 'far');
@@ -180,12 +222,24 @@ if (!dockerAvailable()) {
   // second one, leave no guard row, and make every one of these pass for the
   // wrong reason.
 
+  // The machine and where it is. Every accepted report has to carry
+  // coordinates now, so a test that only cares about IP bucketing still
+  // needs somewhere to stand — otherwise it is refused as 'nopos' before
+  // the rule it is actually testing is ever reached.
   function freshMachine() {
-    return superuserScalar(
-      "select id from public.machines where source = 'osm'" +
+    const row = superuserScalar(
+      "select id || ' ' || lat || ' ' || lng from public.machines where source = 'osm'" +
         ' and id not in (select machine_id from private.report_guard)' +
         ' order by id limit 1',
     );
+    const [id, lat, lng] = row.split(' ');
+    return { id, lat: Number(lat), lng: Number(lng) };
+  }
+
+  // Spread into a report body: standing at the machine, so only the rule
+  // under test can reject it.
+  function at(m) {
+    return { machine: m.id, lat: m.lat, lng: m.lng };
   }
 
   function guardRows(machine) {
@@ -198,32 +252,33 @@ if (!dockerAvailable()) {
     const target = freshMachine();
     // Same real address last, different forged prefixes — exactly the shape
     // Cloudflare produces for a client that sent its own header.
-    assert.equal(await reportMachine({ machine: target, state: 'ok', device: 'xff-a' }, '9.9.9.9, 203.0.113.5'), 'ok');
-    assert.equal(await reportMachine({ machine: target, state: 'full', device: 'xff-b' }, '1.1.1.1, 8.8.8.8, 203.0.113.5'), 'ok');
-    assert.equal(guardRows(target), '2:1', 'two reports, one shared IP bucket');
+    assert.equal(await reportMachine({ ...at(target), state: 'ok', device: 'xff-a' }, '9.9.9.9, 203.0.113.5'), 'ok');
+    assert.equal(await reportMachine({ ...at(target), state: 'full', device: 'xff-b' }, '1.1.1.1, 8.8.8.8, 203.0.113.5'), 'ok');
+    assert.equal(guardRows(target.id), '2:1', 'two reports, one shared IP bucket');
   });
 
   test('client_ip: genuinely different clients still get different buckets', LONG, async () => {
     const target = freshMachine();
-    assert.equal(await reportMachine({ machine: target, state: 'ok', device: 'xff-c' }, '9.9.9.9, 203.0.113.5'), 'ok');
-    assert.equal(await reportMachine({ machine: target, state: 'full', device: 'xff-d' }, '9.9.9.9, 198.51.100.77'), 'ok');
-    assert.equal(guardRows(target), '2:2', 'distinct last elements are distinct clients');
+    assert.equal(await reportMachine({ ...at(target), state: 'ok', device: 'xff-c' }, '9.9.9.9, 203.0.113.5'), 'ok');
+    assert.equal(await reportMachine({ ...at(target), state: 'full', device: 'xff-d' }, '9.9.9.9, 198.51.100.77'), 'ok');
+    assert.equal(guardRows(target.id), '2:2', 'distinct last elements are distinct clients');
   });
 
   test('client_ip: cf-connecting-ip wins over x-forwarded-for', LONG, async () => {
     const target = freshMachine();
     // Cloudflare sets cf-connecting-ip itself and rejects forged ones at the
     // edge, so it is preferred. Same cf value, different xff: one bucket.
-    assert.equal(await reportMachine({ machine: target, state: 'ok', device: 'cf-a' }, '203.0.113.5', { 'CF-Connecting-IP': '198.51.100.9' }), 'ok');
-    assert.equal(await reportMachine({ machine: target, state: 'full', device: 'cf-b' }, '192.0.2.44', { 'CF-Connecting-IP': '198.51.100.9' }), 'ok');
-    assert.equal(guardRows(target), '2:1', 'cf-connecting-ip decides; xff is ignored when it is present');
+    assert.equal(await reportMachine({ ...at(target), state: 'ok', device: 'cf-a' }, '203.0.113.5', { 'CF-Connecting-IP': '198.51.100.9' }), 'ok');
+    assert.equal(await reportMachine({ ...at(target), state: 'full', device: 'cf-b' }, '192.0.2.44', { 'CF-Connecting-IP': '198.51.100.9' }), 'ok');
+    assert.equal(guardRows(target.id), '2:1', 'cf-connecting-ip decides; xff is ignored when it is present');
   });
 
-  test('report_machine: 5km away with acc:5000 (iOS approximate location) returns ok', LONG, async () => {
-    // ~5km north of the machine. slack = acc = 5000, so the far threshold is
-    // 500 + 5000 = 5500m — comfortably clears an actual ~5000m offset.
+  test('report_machine: 8km away with acc:5000 (iOS approximate location) returns ok', LONG, async () => {
+    // ~8km north of the machine — 'far' on its own, per the case above.
+    // slack = acc = 5000 pushes the threshold to 5000 + 5000 = 10000m, so
+    // this passes only because the accuracy radius is honoured.
     const result = await reportMachine(
-      { machine: machineId, state: 'ok', lat: machineLat + 0.045, lng: machineLng, acc: 5000 },
+      { machine: machineId, state: 'ok', lat: machineLat + 0.072, lng: machineLng, acc: 5000 },
       '10.20.30.2',
     );
     assert.equal(result, 'ok');

@@ -208,6 +208,10 @@ export function statusCounts(machines, now){
 // Returns "" when there is nothing close, which is the signal to leave the
 // field empty rather than put a guess in front of someone as if it were
 // known.
+// The 2 km default is about concelho boundaries, not about proximity to a
+// machine — it is deliberately not report_machine()'s 5 km reporting radius,
+// which answers a different question. Both live in schema.sql; the comment
+// there says the same thing from the other side.
 export function suggestTown(machines, lat, lng, within){
   var limit = within == null ? 2000 : within;
   var best = null, bestD = Infinity, d;

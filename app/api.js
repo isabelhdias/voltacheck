@@ -130,7 +130,25 @@ export function getFix(){
 
 export async function pushReport(machineId, status){
   if(!store.live) return "ok";                    // local mode: unchanged, and no geolocation prompt
+
+  /* report_machine() rejects a report with no coordinates ('nopos') — the
+     proximity check is the whole point of the write path, and one that can
+     be skipped by sending nothing is not a check. Refused permission, no
+     Geolocation API, a fix that times out: all land here, and there is no
+     point spending a round trip to be told so. Same string the server
+     returns, so ui.js has one case to handle rather than two.
+
+     Counted, but with no db.rpc span around it: no call was made, so there
+     is no duration to observe. It still belongs in report.result — how
+     often this gate turns someone away is the number to watch now that it
+     no longer fails open, and `reports.outcome` on the server only ever
+     sees the requests that were actually sent. */
   var f = await getFix();
+  if(!f){
+    tel.count("report.result", { outcome:"nopos" });
+    return "nopos";
+  }
+
   // No `metric` on the span: the outcome is only known once the call
   // returns, and db.rpc.duration is dimensioned by it — "how long does a
   // rejection take" is a different question from "how long does a write
@@ -140,14 +158,16 @@ export async function pushReport(machineId, status){
   var res = await db.rpc("report_machine", {
     machine: machineId,
     state:   status,
-    lat:     f ? f.lat : null,
-    lng:     f ? f.lng : null,
-    acc:     f ? f.acc : null,
+    lat:     f.lat,
+    lng:     f.lng,
+    acc:     f.acc,
     device:  deviceId()
   });
   var outcome = res.error ? "erro" : (res.data || "erro");
   // `geo.fix` is whether a position was attached at all, never the position.
-  // Coordinates never leave the phone through this module.
+  // Coordinates never leave the phone through this module. It is always true
+  // here now — a report with no fix returns above and never reaches the RPC
+  // — and stays so the attribute keeps meaning what it always meant.
   var ms = s.end(outcome === "erro" ? "error" : "ok",
                  { "rpc.outcome":outcome, "geo.fix":!!f });
   tel.observe("db.rpc.duration", { rpc:"report_machine", outcome:outcome }, ms);

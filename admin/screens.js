@@ -141,8 +141,9 @@ export async function activity(){
 // database keeps the terse ones because the app maps them to its own
 // Portuguese; this is the only place they are read by a person.
 var OUTCOME = {
-  ok:"Accepted", far:"Too far away", cooldown:"Repeated too soon",
-  flood:"Too many", unknown:"Unknown machine", invalid:"Invalid", erro:"Network failed",
+  ok:"Accepted", far:"Too far away", nopos:"No location shared",
+  cooldown:"Repeated too soon", flood:"Too many", unknown:"Unknown machine",
+  invalid:"Invalid", erro:"Network failed",
 };
 
 export async function behaviour(){
@@ -193,8 +194,10 @@ export async function behaviour(){
   html += '<section><h2>What the database answered</h2>' +
     box("Every report attempted, accepted and rejected, in the last " + DAYS + " days",
         c.hbars(outRows, { emptyText:"No reports attempted in this period." }) +
-        '<p class="empty" style="margin-top:10px">If “too far away” is a big slice, the 2 km ' +
-        'radius is turning away real people — that is the number to watch.</p>') +
+        '<p class="empty" style="margin-top:10px">If “too far away” is a big slice, the 5 km ' +
+        'radius is turning away real people. “No location shared” is the same question for the ' +
+        'rule that a report must carry a position at all — together they are what the ' +
+        'proximity check costs.</p>') +
     '</section>';
 
   html += '<section><h2>What people look for</h2>';

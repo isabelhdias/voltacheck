@@ -173,7 +173,12 @@ test.describe('telemetry', () => {
     expect(log.sev).toBe(17); // OTel SEVERITY_NUMBER_ERROR
   });
 
-  test('a report records the outcome the phone actually saw', async ({ page }) => {
+  test('a report records the outcome the phone actually saw', async ({ page, context }) => {
+    // A position is now required, not optional: report_machine() refuses a
+    // report with no coordinates, and pushReport() refuses it before the
+    // round trip. So this case has to stand at the machine to get an 'ok'.
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: 38.7380, longitude: -9.1450 });
     const { flushes } = await liveApp(page);
 
     // Open the sheet on the machine under the map centre and report a state.
@@ -197,6 +202,33 @@ test.describe('telemetry', () => {
     expect(result.d.outcome).toBe('ok');
 
     expect(await page.evaluate(() => window.__rpc || [])).toContain('report_machine');
+  });
+
+  test('a report with no position is refused before the network, and counted', async ({ page, context }) => {
+    // The other side of the same rule. With no geolocation permission
+    // getFix() resolves null, and pushReport() returns 'nopos' without
+    // calling the RPC — so the server's own reports.outcome never sees this
+    // one, and report.result is the only place it is counted. That count is
+    // the number that says how many people the location requirement is
+    // turning away, which is the thing to watch after it ships.
+    await context.clearPermissions();
+    const { flushes } = await liveApp(page);
+
+    await page.evaluate(() =>
+      import('/app/ui.js').then((ui) => ui.select('11111111-1111-1111-1111-111111111111'))
+    );
+    await page.waitForTimeout(300);
+    await page.click('.choice[data-s="ok"]');
+    await page.waitForTimeout(600);
+    await forceFlush(page);
+
+    const m = flushes.flatMap((f) => f.payload.m || []);
+    const result = m.find((e) => e.n === 'report.result');
+    expect(result, 'report.result was not recorded').toBeTruthy();
+    expect(result.d.outcome).toBe('nopos');
+
+    expect(await page.evaluate(() => window.__rpc || [])).not.toContain('report_machine');
+    await expect(page.locator('#toast')).toContainText('Sem a tua localização');
   });
 
   test('opening a machine counts once, and refreshing it does not count again', async ({ page }) => {

@@ -206,16 +206,19 @@ begin
     'sem-ip');
 end $$;
 
--- Returns one of: ok, cooldown, flood, far, unknown, invalid.
+-- Returns one of: ok, cooldown, flood, far, nopos, unknown, invalid.
 -- It returns a string rather than raising, so the client can map each case to
 -- its own line of Portuguese without depending on HTTP status plumbing.
 --
--- Every one of those six strings is also counted, under
+-- Every one of those seven strings is also counted, under
 -- `reports.outcome`, by private.note_outcome() — defined further down this
 -- file, which is fine because plpgsql resolves calls at run time and the
 -- Migrate workflow applies the whole file in one transaction. Until now the
--- rejections were computed and thrown away: if the 2 km proximity rule were
--- turning away real people, nothing here would ever have said so. See
+-- rejections were computed and thrown away: if the proximity rule were
+-- turning away real people, nothing here would ever have said so. That
+-- matters more since the rule stopped failing open — `nopos` is the count
+-- that says how many people the location requirement is turning away, and
+-- it is the number to watch after it ships. See
 -- docs/observability-plan.md.
 create or replace function public.report_machine(
   machine  uuid,
@@ -237,6 +240,9 @@ declare
   who_ip text;
   slack  double precision;
   n      integer;
+  -- How far from the machine a report is still treated as an observation of
+  -- it. A judgement call, not a finding — see docs/rate-limiting-plan.md.
+  radius constant double precision := 5000;
 begin
   if state not in ('ok','full','down') then
     return private.note_outcome('reports.outcome', 'invalid');
@@ -251,24 +257,38 @@ begin
   who_ip := private.guard_hash('ip', ip);
   who    := private.guard_hash('dev', coalesce(nullif(device, ''), ip));
 
-  -- Proximity, 2 km. The point of this check was never to prove someone is
-  -- standing at the machine — it's to accept a fresh *observation*: someone
-  -- who just left the shop, reporting from the car park or a couple of
-  -- minutes down the road on foot or by car, while still rejecting a report
-  -- from across the region, which isn't an observation of this machine at
-  -- all. `acc` is the browser's own accuracy radius in metres, and it is
+  -- Proximity, 5 km, and mandatory. The point of this check was never to
+  -- prove someone is standing at the machine — it's to accept a fresh
+  -- *observation*: someone who just left the shop, reporting from the car
+  -- park or a few minutes down the road on foot or by car, while still
+  -- rejecting a report from across the region, which isn't an observation of
+  -- this machine at all. 5 km is comfortably inside "the errand I am on"; it
+  -- is a different town only in the densest bits of Lisbon and Porto, where
+  -- the machine you actually used is the one you tapped.
+  --
+  -- No coordinates is a rejection ('nopos'), not a pass. This used to fail
+  -- open, on the reasoning that blocking a real report is worse than letting
+  -- an unverifiable one through — but a check anyone skips by sending
+  -- nothing is not a check, and the accidental misreports it exists to catch
+  -- (wrong pin tapped from home, a sheet left open in a background tab) are
+  -- exactly the ones that arrive with no position attached. The cost is real
+  -- and one-sided: someone who refuses the location prompt can still read
+  -- the whole map, but cannot report at all.
+  --
+  -- `acc` is the browser's own accuracy radius in metres, and it is still
   -- deliberately not capped: with iOS Precise Location off the radius is
   -- 1-20 km, and capping it would reject those people while stopping nobody
-  -- who is lying — a liar picks the coordinates too. Missing coordinates are
-  -- accepted; blocking real reports is worse than letting a few bad ones in.
-  -- And because this whole check fails open, it only ever constrains someone
-  -- who shares their real location in the first place — being generous here
-  -- costs nothing against anyone actually determined to lie.
-  if lat is not null and lng is not null then
-    slack := greatest(coalesce(acc, 0), 0);
-    if private.metres_between(lat, lng, m_lat, m_lng) > 2000 + slack then
-      return private.note_outcome('reports.outcome', 'far');
-    end if;
+  -- who is lying — anyone forging `acc` can forge `lat`/`lng` just as
+  -- easily, and every machine's real position is public. Coordinates stay
+  -- client-supplied, so this is a speed bump against accidents and lazy
+  -- scripts, not a control. See docs/rate-limiting-plan.md.
+  if lat is null or lng is null then
+    return private.note_outcome('reports.outcome', 'nopos');
+  end if;
+
+  slack := greatest(coalesce(acc, 0), 0);
+  if private.metres_between(lat, lng, m_lat, m_lng) > radius + slack then
+    return private.note_outcome('reports.outcome', 'far');
   end if;
 
   if random() < 0.02 then
@@ -534,8 +554,13 @@ begin
    order by private.metres_between(submit_machine.lat, submit_machine.lng, m.lat, m.lng) asc
    limit 1;
 
-  -- 2 km, the same radius report_machine() treats as "near this machine".
-  -- Inside it, two machines really are almost always in one concelho.
+  -- 2 km, and deliberately not tied to report_machine()'s radius, which is
+  -- now 5 km: that one answers "did this person plausibly just see the
+  -- machine?", this one answers "are these two machines in the same
+  -- concelho?" — and inside 2 km they almost always are, while 5 km crosses
+  -- a boundary often enough to reintroduce the wrong-concelho bug this
+  -- fallback was narrowed to avoid. Matches suggestTown()'s default in
+  -- app/domain.js, which prefills the same field client-side.
   if v_town is null and n_metres is not null and n_metres <= 2000 then
     v_town := n_town;
   end if;
