@@ -28,40 +28,40 @@ exists to close them:
 
 ## The four screens
 
-Served at `/admin/`, phone-first, one column, same tokens as the app.
+Served at `/admin/`, phone-first, one column, same design tokens as the app —
+and in English, for the reason set out further down.
 
-### 1. Agora
-- **Cobertura viva** — % of machines with a report newer than `STALE_AFTER`.
-  The hero number.
-- Machines total · added in 7 d · submissions pending, and the age of the
-  oldest one (the review queue going quiet is a known failure mode — see
+### 1. Now
+- **Live coverage** — % of machines with a report newer than `STALE_AFTER`.
+  The hero number, and the one thing nothing measured before.
+- Machines total · added in 7 d · submissions awaiting review, with the age
+  of the oldest (the review queue going quiet is a known failure mode — see
   `docs/supabase-setup.md`).
-- Reports in 24 h, split ok / cheia / avariada.
-- Visits and sessions in 24 h · errors in 24 h · last successful `pull()`.
+- Reports in 24 h, split working / full / broken.
+- Visits, sessions and errors today · when telemetry was last seen.
 
-### 2. Atividade
+### 2. Activity
 Time series, drawn as inline SVG. No chart library — see "no new
 dependencies" below.
 - Reports/day by status, 30 d.
-- New machines and submissions/day.
-- Visits and unique sessions/day.
-- Reports by hour of day: when the map is being kept fresh, and when it
-  isn't.
+- Visits and sessions/day.
+- New machines and accepted submissions/day.
 
-### 3. Comportamento
-- The funnel: opened the map → opened a machine's sheet → tapped a state →
-  the write was accepted.
-- **Report outcomes** broken out by the six strings `report_machine()`
-  returns. The `far` rate is the most actionable number in the system.
-- Search and filter use: top concelhos searched, chains filtered, distance
-  picks, locate taps versus permission denials.
+### 3. Behaviour
+- The funnel: opened the map → opened a machine → tapped a state → the
+  write was recorded, each step as a share of the one before it.
+- **Report outcomes**, broken out by the strings `report_machine()` returns.
+  The "too far away" rate is the most actionable number in the system.
+- Search and filter use: top concelhos searched, chains filtered, and locate
+  taps with refusals told apart from timeouts.
 
-### 4. Saúde
-- p50/p95 for `pull`, `report_machine`, `submit_machine`, first render.
-- JS errors grouped by message, with count and last seen.
-- Recent traces as a span tree: `app.boot` → `db.connect` →
-  `db.pull` (machines) → `db.pull` (reports) → first paint.
-- Rate-limit hits over time; data freshness; the egress estimate below.
+### 4. Health
+- p95 for boot, both pulls, and the write RPC — as bucket bounds ("≤ 1 s"),
+  never interpolated into false precision.
+- JS errors grouped by message, with count, sessions and release.
+- Recent traces as a waterfall: `app.boot` → `db.connect` →
+  `db.pull` (machines) → `db.pull` (reports).
+- Storage against the ceiling, and the monthly egress estimate below.
 
 ## OpenTelemetry, and where the line is drawn
 
@@ -194,24 +194,36 @@ The policy, in order of how much each part buys:
 2. **Allowlist by user id, not by email.** Supabase Auth lets a user change
    their own email address. An allowlist keyed on an email is a check that
    can be argued with; one keyed on `sub` (a UUID) cannot. `private.admins`
-   holds the uid; the email is stored alongside for legibility only, and a
-   confirmed email is required as a second condition.
+   holds the uid; the email is stored alongside and checked *against* the
+   token, so an email change locks the account out rather than carrying the
+   privilege to a new address.
 3. **TOTP required, enforced in Postgres.** Supabase Auth issues `aal2` in
    the JWT once a second factor has been verified. `public.is_admin()`
-   requires it. So an attacker holding Isabel's inbox still cannot read a
+   requires it. So an attacker holding Isabel's password still cannot read a
    row without her authenticator app. This is the difference between "one
-   factor that happens to be email" and actual two-factor.
+   factor that happens to be a password" and actual two-factor.
    It is a column on `private.admins`, not a constant, so if enrolling TOTP
    on the phone turns out to be miserable it can be relaxed with an `update`
-   rather than a migration.
-4. **A six-digit email code, not a magic link.** Tapping a link in a mail
-   app frequently opens a *different* browser than the one holding the PKCE
-   verifier, and the sign-in silently fails. Typing a code back into the
-   page that asked for it avoids that, and avoids configuring a redirect
-   allowlist at all.
-5. **An audit trail.** Every admin function call writes to
-   `private.admin_audit`: who, when, which function. If the login is ever
-   abused there is a record of what was read.
+   rather than a migration. It defaults to on.
+4. **Password, not an emailed code.** This is a change from the first draft
+   of this plan, and the reasons only turned up on contact with Supabase.
+   The free tier's built-in SMTP is rate limited to a handful of messages an
+   hour and is explicitly not meant for production — so a few retries on a
+   bad morning could lock Isabel out of her own dashboard, by her own hand.
+   And getting a six-digit code rather than a magic link means editing the
+   email template to include the token, which is one more thing to do by
+   hand on a phone. With TOTP mandatory this is two independent factors
+   either way, and the password is the one that cannot fail because an inbox
+   was slow. (Magic links have their own phone-specific failure besides:
+   tapping the link in a mail app often opens a *different* browser from the
+   one holding the PKCE verifier, and the sign-in silently fails.)
+5. **An audit trail.** Every successful admin read writes to
+   `private.admin_access`: who, when, which function, with what arguments.
+   A *refused* one does not — it raises, and the raise rolls its own audit
+   row back with it, since Postgres has no autonomous transactions. That gap
+   is named in `schema.sql` rather than papered over; it is small, because
+   these functions cannot be called at all without a valid session, and with
+   sign-ups off there is no third party who could hold one.
 6. **No new secret anywhere.** The dashboard uses the public anon key plus
    Isabel's own session. The service key stays out of the repo, as it
    already does.
@@ -220,7 +232,33 @@ The policy, in order of how much each part buys:
 `auth.jwt()`. Same thing — that is what `auth.jwt()` does — but it means the
 function works, and is tested, against the plain Postgres + PostgREST
 containers the integration suite already builds, instead of needing a
-Supabase-only shim.
+Supabase-only shim. `test/integration/admin.test.js` mints real signed JWTs
+and walks every way in that must not work: no token, a stranger's session,
+the right uid at `aal1`, the right uid with a changed email, and a token
+signed with the wrong secret.
+
+## The panel is in English
+
+The app is Portuguese and stays that way — it is for people standing in a
+supermarket in Portugal. The dashboard is for whoever maintains the thing,
+so its copy, its number formatting (`2,444`, `14.1%`) and its tab names are
+English. The two are separate audiences and there is no reason to make the
+second read the first's language.
+
+Where the two meet, the panel translates: `report_machine()` returns
+`far`/`cooldown`/`flood` and the app maps those to its own Portuguese, while
+the panel maps the same strings to "Too far away", "Repeated too soon",
+"Too many". The database keeps the terse originals.
+
+## What it looks like
+
+| Now | Behaviour | Health |
+|---|---|---|
+| ![The Now screen](images/admin-now.jpg) | ![The Behaviour screen](images/admin-behaviour.jpg) | ![The Health screen](images/admin-health.jpg) |
+
+Generated by `node tools/screenshots.mjs`, same as the app's, with demo
+numbers — the real ones are the live site's and this repo is public. Don't
+replace them by hand; re-run the script.
 
 ## What Isabel has to do by hand
 
@@ -229,10 +267,13 @@ and it is where mistakes have actually happened before.
 
 1. Supabase → Authentication → Providers → Email: **turn off "Allow new
    users to sign up"**.
-2. Sign in once at `/admin/` to create the account, then run one `insert`
-   into `private.admins` from the SQL editor (the dashboard prints the
-   statement with the uid filled in).
-3. Enrol TOTP from the panel's own settings screen.
+2. Supabase → Authentication → Users → **Add user**: her email and a
+   password. (The panel cannot offer sign-up, by design — see step 1.)
+3. Open `/admin/`, sign in. It will say the account is not on the admin list
+   and print the exact `insert` with her uid already filled in — copy it into
+   the SQL editor and run it once.
+4. Reload. It will ask her to enrol a second factor: scan the QR with any
+   authenticator app and type the six digits back.
 
 Everything else — tables, functions, grants, rollups — is applied by the
 Migrate workflow from `schema.sql`, as usual.
@@ -267,5 +308,4 @@ behaviour.
    flush path, and the call sites across `app/`.
 3. **The dashboard.** `/admin/`, auth, the four screens.
 
-Nothing in phase 1 changes what the app does or sends; the app does not yet
-call the ingest endpoint at all.
+All three have shipped.

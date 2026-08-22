@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16233D">
+<meta name="robots" content="noindex, nofollow">
+<title>VoltaCheck · Admin</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+
+<style>
+  /* The same tokens as the app — index.html is the source of truth for
+     these and they are copied, not re-picked. A dashboard in different
+     colours would read as a different product. */
+  :root{
+    --ink:#14202E; --ink-soft:#6B7688; --ink-faint:#8A93A3;
+    --paper:#F4F2EC; --line:#DCDAD2; --line-soft:#EAE8E1;
+    --azulejo:#1F4FD8;
+    --ok:#12A05F; --full:#E39B22; --down:#DE4A3F; --stale:#98A0AE;
+    --card:#FFFFFF;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    font-family:Archivo,system-ui,-apple-system,"Segoe UI",sans-serif;
+    font-variation-settings:"wdth" 100;
+    background:var(--paper); color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  h1,h2,h3{ margin:0; font-weight:700; }
+  button{ font:inherit; cursor:pointer; }
+
+  /* ── gate ── */
+  /* The [hidden] rule is not redundant: `display:grid` below wins over the
+     user-agent's `[hidden]{display:none}`, so without it the login card stays
+     on the page behind the dashboard once you are in. */
+  #gate{ min-height:100dvh; display:grid; place-items:center; padding:24px; }
+  #gate[hidden]{ display:none; }
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px; width:100%; max-width:380px;
+  }
+  .card h1{ font-size:20px; font-variation-settings:"wdth" 84; letter-spacing:-.01em; }
+  .card p{ color:var(--ink-soft); font-size:14px; line-height:1.45; margin:8px 0 18px; }
+  label{ display:block; font-size:12px; font-weight:600; color:var(--ink-soft);
+         text-transform:uppercase; letter-spacing:.06em; margin:14px 0 6px; }
+  input{
+    font:inherit; width:100%; padding:11px 12px; border-radius:10px;
+    border:1px solid var(--line); background:var(--paper); color:var(--ink);
+  }
+  input:focus{ outline:2px solid var(--azulejo); outline-offset:1px; }
+  .primary{
+    margin-top:18px; width:100%; padding:12px; border:0; border-radius:10px;
+    background:var(--azulejo); color:#fff; font-weight:700;
+  }
+  .primary[disabled]{ opacity:.5; cursor:default; }
+  .err{ color:var(--down); font-size:13px; margin-top:12px; min-height:18px; }
+  .note{ font-size:12px; color:var(--ink-faint); margin-top:14px; line-height:1.5; }
+  code{
+    display:block; background:var(--paper); border:1px solid var(--line);
+    border-radius:8px; padding:10px; font-size:11px; line-height:1.5;
+    overflow-x:auto; white-space:pre; margin-top:8px;
+  }
+  #qr{ margin:14px auto 0; width:180px; height:180px; display:block; background:#fff; }
+  #qr svg, #qr img{ width:100%; height:100%; }
+
+  /* ── panel ── */
+  #panel[hidden]{ display:none; }
+  header{
+    background:var(--ink); color:var(--paper);
+    padding:calc(12px + env(safe-area-inset-top)) 16px 12px;
+    display:flex; align-items:baseline; gap:10px;
+  }
+  header h1{ font-size:17px; font-variation-settings:"wdth" 80; }
+  header .rel{ font-size:11px; color:#8FA0BC; margin-left:auto; }
+  header button{
+    background:none; border:0; color:#8FA0BC; font-size:12px;
+    text-decoration:underline; padding:0 0 0 12px;
+  }
+  nav{
+    display:flex; gap:2px; background:var(--ink); padding:0 8px 8px;
+    overflow-x:auto; -webkit-overflow-scrolling:touch;
+  }
+  nav button{
+    flex:0 0 auto; border:0; border-radius:8px; padding:7px 12px;
+    background:transparent; color:#8FA0BC; font-size:13px; font-weight:600;
+  }
+  nav button[aria-selected="true"]{ background:var(--paper); color:var(--ink); }
+  main{ padding:14px; max-width:760px; margin:0 auto; }
+
+  section{ margin-bottom:22px; }
+  section > h2{
+    font-size:12px; text-transform:uppercase; letter-spacing:.07em;
+    color:var(--ink-soft); margin-bottom:10px;
+  }
+  .tiles{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; }
+  .tile{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  .tile .k{ font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); }
+  .tile .v{ font-size:26px; font-weight:700; font-variation-settings:"wdth" 88; line-height:1.15; margin-top:4px; }
+  .tile .s{ font-size:12px; color:var(--ink-faint); margin-top:2px; }
+  .tile.wide{ grid-column:1 / -1; }
+
+  .panelbox{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .panelbox + .panelbox{ margin-top:10px; }
+  figure{ margin:0; }
+  figcaption{ font-size:12px; color:var(--ink-soft); margin-bottom:8px; }
+  svg{ display:block; width:100%; height:auto; overflow:visible; }
+
+  .legend{ display:flex; flex-wrap:wrap; gap:12px; margin-top:8px; font-size:12px; color:var(--ink-soft); }
+  .legend i{ display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:5px; }
+
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  th{ text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.06em;
+      color:var(--ink-soft); font-weight:600; padding:0 0 6px; }
+  td{ padding:7px 0; border-top:1px solid var(--line-soft); vertical-align:top; }
+  td.n{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .msg{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; word-break:break-word; }
+
+  /* The bar tables. table-layout:fixed is load-bearing: the middle column
+     holds a block with a percentage width, which has no intrinsic width to
+     lay out against, so under the default auto layout the column collapsed
+     to nothing and every bar was invisible. */
+  table.hb{ table-layout:fixed; }
+  table.hb td:first-child{ width:42%; }
+  table.hb td:last-child{ width:74px; }
+
+  .empty{ color:var(--ink-faint); font-size:13px; padding:6px 0; }
+  .scroll{ overflow-x:auto; }
+</style>
+</head>
+<body>
+
+<!-- The gate. Not the security boundary — that is public.is_admin() in the
+     database, which every read below goes through. This is just the part a
+     person can see. -->
+<div id="gate">
+  <div class="card">
+    <h1>VoltaCheck · Admin</h1>
+
+    <form id="login">
+      <p>Administrators only.</p>
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="username" required>
+      <label for="pw">Password</label>
+      <input id="pw" type="password" autocomplete="current-password" required>
+      <button class="primary" type="submit">Sign in</button>
+    </form>
+
+    <form id="mfa" hidden>
+      <p>Six-digit code from your authenticator app.</p>
+      <label for="code">Code</label>
+      <input id="code" inputmode="numeric" autocomplete="one-time-code"
+             pattern="[0-9]{6}" maxlength="6" required>
+      <button class="primary" type="submit">Confirm</button>
+    </form>
+
+    <form id="enrol" hidden>
+      <p>Second factor missing. Scan this with your authenticator app and
+         confirm with the six digits it shows.</p>
+      <div id="qr"></div>
+      <label for="secret">Or type this key by hand</label>
+      <input id="secret" readonly>
+      <label for="enrolcode">Code</label>
+      <input id="enrolcode" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required>
+      <button class="primary" type="submit">Activate</button>
+    </form>
+
+    <div id="notadmin" hidden>
+      <p>You are signed in, but this account is not on the admin list.
+         Run this once in Supabase’s SQL Editor:</p>
+      <code id="grantsql"></code>
+      <p class="note">Then reload this page.</p>
+    </div>
+
+    <div class="err" id="gate-err"></div>
+    <p class="note" id="gate-note"></p>
+  </div>
+</div>
+
+<div id="panel" hidden>
+  <header>
+    <h1>Admin</h1>
+    <span class="rel" id="release"></span>
+    <button id="signout" type="button">Sign out</button>
+  </header>
+  <nav id="tabs" role="tablist"></nav>
+  <main id="screen"></main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script type="module" src="./main.js"></script>
+</body>
+</html>

@@ -71,6 +71,7 @@ jobs:
           # that opened the map for nothing.
           cp index.html _site/
           cp -r app _site/
+          cp -r admin _site/
           cp seed/machines.js _site/seed/
 
           # Stamp the release into the copy, never into the repo. RELEASE is
@@ -123,6 +124,12 @@ jobs:
               mkdir -p "$dest/seed"
               cp "$RUNNER_TEMP/wt/index.html" "$dest/"
               cp -r "$RUNNER_TEMP/wt/app" "$dest/"
+              # The admin panel reads its Supabase values from ../app/config.js
+              # rather than holding its own, so blanking that one file below
+              # takes the preview's panel offline too — it says so and shows
+              # nothing. A branch cannot be published with a working door into
+              # the real project's telemetry.
+              [ -d "$RUNNER_TEMP/wt/admin" ] && cp -r "$RUNNER_TEMP/wt/admin" "$dest/"
               cp "$RUNNER_TEMP/wt/seed/machines.js" "$dest/seed/"
 
               # Previews run in LOCAL MODE. Blanking these two values is what

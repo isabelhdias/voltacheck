@@ -1267,6 +1267,358 @@ returns jsonb language sql stable security definer set search_path = '' as $$
 $$;
 
 -- ─────────────────────────────────────────────
+-- The admin dashboard's gate, and the only functions that can read past it
+--
+-- The panel is served from GitHub Pages at /admin/, which is public, from a
+-- public repo, using the public anon key. That is fine, and it is fine for
+-- exactly one reason: the page is not the gate. Every read below is a
+-- security definer function that starts by checking the caller, the tables
+-- live in `private` which the Data API does not expose, and neither anon nor
+-- authenticated holds a grant on any of them. A bug in the dashboard's
+-- JavaScript cannot leak a row Postgres refused to return.
+--
+-- The policy, in order of how much each part buys (docs/observability-plan.md
+-- has the reasoning):
+--
+--   1. Sign-ups are turned OFF in Supabase Auth. That is a setting, not code,
+--      and it is the single highest-value part: with no way to create an
+--      account, the attack surface is one specific person's credentials
+--      rather than "anyone on the internet, plus a mistake in this file".
+--   2. The allowlist is keyed on the user's uid, not their email. Supabase
+--      Auth lets a user change their own email address, so an allowlist
+--      keyed on one is a check that can be argued with.
+--   3. A second factor is required, and required HERE rather than in the
+--      browser: Supabase puts `aal2` in the JWT once a TOTP challenge has
+--      been passed, and is_admin() refuses anything less. Someone holding
+--      the password still cannot read a row without the authenticator app.
+--   4. Reads are logged.
+--
+-- is_admin() reads request.jwt.claims directly rather than calling
+-- auth.jwt(). It is the same thing — that is what auth.jwt() does — but it
+-- means this works, and is tested, against the plain Postgres + PostgREST
+-- containers the integration suite builds, instead of needing a shim for a
+-- schema only real Supabase has.
+-- ─────────────────────────────────────────────
+
+create table if not exists private.admins (
+  uid          uuid primary key,
+  email        text,
+  require_aal2 boolean not null default true,
+  added_at     timestamptz not null default now(),
+  note         text
+);
+
+-- Deliberately seeded with nobody. The first row is added by hand, once, from
+-- the Supabase SQL editor — the panel prints the exact statement with the uid
+-- filled in after the first sign-in. A default row here would be a backdoor
+-- in a public repo.
+revoke all on table private.admins from anon, authenticated;
+
+create or replace function private.jwt() returns jsonb
+language sql stable set search_path = '' as $$
+  select nullif(current_setting('request.jwt.claims', true), '')::jsonb;
+$$;
+
+create or replace function private.jwt_uid() returns uuid
+language plpgsql stable set search_path = '' as $$
+begin
+  return (private.jwt() ->> 'sub')::uuid;
+exception when others then
+  -- A `sub` that is not a uuid is not a Supabase session. Returning null
+  -- rather than raising keeps a malformed token from being distinguishable
+  -- from an absent one.
+  return null;
+end $$;
+
+create or replace function public.is_admin() returns boolean
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  c jsonb;
+  a private.admins%rowtype;
+  u uuid;
+begin
+  c := private.jwt();
+  if c is null then return false; end if;
+
+  u := private.jwt_uid();
+  if u is null then return false; end if;
+
+  select * into a from private.admins t where t.uid = u;
+  if not found then return false; end if;
+
+  -- A column rather than a constant, so if enrolling TOTP on a phone turns
+  -- out to be miserable it can be relaxed with an update instead of a
+  -- migration. It defaults to true and should stay that way.
+  if a.require_aal2 and coalesce(c ->> 'aal', 'aal1') <> 'aal2' then
+    return false;
+  end if;
+
+  -- Belt and braces on (2): if the row records an email, the token's must
+  -- still match it. An email change then locks the account out rather than
+  -- silently carrying the privilege to a new address.
+  if a.email is not null and lower(coalesce(c ->> 'email', '')) <> lower(a.email) then
+    return false;
+  end if;
+
+  return true;
+end $$;
+
+revoke all on function public.is_admin() from public, anon;
+grant execute on function public.is_admin() to authenticated;
+
+-- What was read, and when. Not what was *refused*: a denied call raises, and
+-- the raise rolls its own audit row back with it — Postgres has no autonomous
+-- transactions to write around that. It is a small gap and worth naming
+-- rather than papering over: these functions cannot be called at all without
+-- a valid Supabase session, and Supabase's own auth log is where a failed
+-- sign-in shows up. With sign-ups off, there is no third party who could
+-- hold a session to be refused with.
+create table if not exists private.admin_access (
+  id   bigint generated always as identity primary key,
+  at   timestamptz not null default now(),
+  uid  uuid,
+  fn   text not null,
+  args jsonb
+);
+create index if not exists admin_access_at on private.admin_access (at desc);
+revoke all on table private.admin_access from anon, authenticated;
+
+create or replace function private.admin_guard(fn text, args jsonb default '{}'::jsonb)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  if not public.is_admin() then
+    raise exception 'not authorised' using errcode = '42501';
+  end if;
+  insert into private.admin_access (uid, fn, args) values (private.jwt_uid(), fn, args);
+  if random() < 0.05 then
+    delete from private.admin_access where at < now() - interval '180 days';
+  end if;
+end $$;
+
+-- ── Reading histograms back ──
+
+-- Element-wise sum across rows, so a month of daily histograms collapses into
+-- one before a quantile is taken off it.
+drop aggregate if exists private.arr_sum(bigint[]);
+create aggregate private.arr_sum(bigint[]) (sfunc = private.arr_add, stype = bigint[]);
+
+-- The bucket boundary a quantile falls in. Deliberately NOT interpolated: an
+-- explicit-bucket histogram does not know where inside a bucket its
+-- observations sat, and a number like "p95 = 812 ms" invented by
+-- interpolating would read as more precise than the data is. The dashboard
+-- shows these as "≤ 1 s", which is what was actually measured.
+create or replace function private.hist_quantile(b bigint[], q double precision)
+returns double precision language plpgsql immutable set search_path = '' as $$
+declare
+  bounds double precision[] := private.hist_bounds();
+  total  bigint := 0;
+  run    bigint := 0;
+  i      int;
+begin
+  if b is null then return null; end if;
+  for i in 1 .. coalesce(array_length(b, 1), 0) loop
+    total := total + coalesce(b[i], 0);
+  end loop;
+  if total = 0 then return null; end if;
+
+  for i in 1 .. array_length(b, 1) loop
+    run := run + coalesce(b[i], 0);
+    if run >= q * total then
+      -- The last bucket is the open-ended one: everything above the highest
+      -- boundary. There is no upper bound to report, so null says so.
+      if i > array_length(bounds, 1) then return null; end if;
+      return bounds[i];
+    end if;
+  end loop;
+  return null;
+end $$;
+
+-- ── The four screens ──
+--
+-- One function per screen rather than one per number: a phone on a mobile
+-- connection would rather make four requests than forty, and each of these
+-- is a handful of index scans over tables measured in thousands of rows.
+
+-- Screen 1, "Agora".
+create or replace function public.admin_overview()
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare
+  total    bigint;
+  ever     bigint;
+  fresh    bigint;
+  out_j    jsonb;
+  since24  timestamptz := now() - interval '24 hours';
+  today    date := (now() at time zone 'utc')::date;
+begin
+  perform private.admin_guard('admin_overview');
+
+  select count(*) into total from public.machines;
+  select count(distinct r.machine_id) into ever from public.reports r;
+  select count(distinct r.machine_id) into fresh
+    from public.reports r where r.created_at > now() - interval '18 hours';
+
+  select jsonb_build_object(
+    'at', now(),
+    'machines', jsonb_build_object(
+      'total', total,
+      'new_7d', (select count(*) from public.machines m
+                  where m.created_at > now() - interval '7 days'),
+      'reported_ever', ever,
+      'never_reported', total - ever),
+    -- The hero number: the share of the map carrying a report that has not
+    -- yet aged past STALE_AFTER. Per-mille, so one decimal place needs no
+    -- float. This is the decay mechanic scored against itself.
+    'coverage_pm', case when total > 0 then (fresh * 1000) / total else 0 end,
+    'reports', jsonb_build_object(
+      'h24', coalesce((select jsonb_object_agg(s, n) from (
+                select r.status as s, count(*) as n from public.reports r
+                 where r.created_at > since24 group by 1) x), '{}'::jsonb),
+      'total', (select count(*) from public.reports)),
+    'submissions', jsonb_build_object(
+      'pending', (select count(*) from public.machine_submissions
+                   where status = 'pending'),
+      'oldest_h', coalesce((select round(extract(epoch from (now() - min(created_at))) / 3600)
+                              from public.machine_submissions where status = 'pending'), 0)),
+    'traffic', jsonb_build_object(
+      'visits_today',   coalesce((select sum(value) from private.telemetry_daily
+                                   where day = today and metric = 'app.visit'), 0),
+      'sessions_today', coalesce((select sum(value) from private.telemetry_daily
+                                   where day = today and metric = 'app.session'), 0),
+      'errors_today',   coalesce((select sum(value) from private.telemetry_daily
+                                   where day = today and metric = 'app.error'), 0)),
+    'telemetry', jsonb_build_object(
+      'raw_rows',   (select count(*) from private.telemetry_raw),
+      'daily_rows', (select count(*) from private.telemetry_daily),
+      'limits',     private.telemetry_limits(),
+      'last_seen',  (select max(at) from private.telemetry_raw))
+  ) into out_j;
+
+  return out_j;
+end $$;
+
+-- Screens 2 and 3: whatever daily rows the caller's charts need. The metric
+-- list is a parameter rather than "everything since a date" because
+-- everything is a few hundred rows a day, and a month of it is more JSON
+-- than a phone should download to draw four charts.
+create or replace function public.admin_series(p_days int, p_metrics text[])
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare
+  out_j jsonb;
+begin
+  perform private.admin_guard('admin_series',
+    jsonb_build_object('days', p_days, 'metrics', to_jsonb(p_metrics)));
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'd', t.day, 'm', t.metric, 'k', t.dims,
+           'v', t.value, 'n', t.hits, 'sum', t.sum_ms,
+           'p50', private.hist_quantile(t.buckets, 0.50),
+           'p95', private.hist_quantile(t.buckets, 0.95))
+         order by t.day), '[]'::jsonb)
+    into out_j
+    from private.telemetry_daily t
+   where t.metric = any(p_metrics)
+     and t.day > ((now() at time zone 'utc')::date - least(greatest(p_days, 1), 400));
+
+  return out_j;
+end $$;
+
+-- The top values of one dimension over a window — the concelhos people
+-- actually search for, the chains they actually filter by.
+create or replace function public.admin_top(p_metric text, p_days int, p_limit int)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare
+  out_j jsonb;
+begin
+  perform private.admin_guard('admin_top', jsonb_build_object('metric', p_metric));
+
+  select coalesce(jsonb_agg(x), '[]'::jsonb) into out_j from (
+    select t.dims as k, sum(t.value) as v
+      from private.telemetry_daily t
+     where t.metric = p_metric
+       and t.day > ((now() at time zone 'utc')::date - least(greatest(p_days, 1), 400))
+     group by t.dims
+     order by sum(t.value) desc
+     limit least(greatest(p_limit, 1), 100)
+  ) x;
+
+  return out_j;
+end $$;
+
+-- Screen 4, the errors half: grouped by message rather than listed, because
+-- one broken phone reloading twenty times is one bug, not twenty.
+create or replace function public.admin_errors(p_hours int, p_limit int)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare
+  out_j jsonb;
+begin
+  perform private.admin_guard('admin_errors', jsonb_build_object('hours', p_hours));
+
+  select coalesce(jsonb_agg(x order by x.n desc), '[]'::jsonb) into out_j from (
+    select coalesce(t.attrs ->> 'exception.message', t.name) as msg,
+           t.name as kind,
+           count(*) as n,
+           max(t.at) as last_seen,
+           count(distinct t.sess) as sessions,
+           jsonb_agg(distinct t.release) as releases
+      from private.telemetry_raw t
+     where t.kind = 'log'
+       and t.severity >= 17
+       and t.at > now() - (least(greatest(p_hours, 1), 720) || ' hours')::interval
+     group by 1, 2
+     order by count(*) desc
+     limit least(greatest(p_limit, 1), 100)
+  ) x;
+
+  return out_j;
+end $$;
+
+-- Screen 4, the traces half: the most recent sampled traces, each with its
+-- spans in start order, so the panel can draw a waterfall.
+create or replace function public.admin_traces(p_limit int)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare
+  out_j jsonb;
+begin
+  perform private.admin_guard('admin_traces');
+
+  select coalesce(jsonb_agg(x order by x.started desc), '[]'::jsonb) into out_j from (
+    select encode(t.trace_id, 'hex') as trace,
+           min(t.at) as started,
+           max(t.dur_ms) as total_ms,
+           jsonb_agg(jsonb_build_object(
+             'name', t.name, 'span', encode(t.span_id, 'hex'),
+             'parent', encode(t.parent_id, 'hex'),
+             'at', t.at, 'ms', t.dur_ms, 'a', t.attrs) order by t.at) as spans
+      from private.telemetry_raw t
+     where t.kind = 'span' and t.trace_id is not null
+     group by t.trace_id
+     order by min(t.at) desc
+     limit least(greatest(p_limit, 1), 50)
+  ) x;
+
+  return out_j;
+end $$;
+
+-- Nothing here is reachable with the anon key. `authenticated` is the role a
+-- signed-in session runs as, and every function above still refuses anyone
+-- who is not on the allowlist at aal2 — the grant is the outer door, not the
+-- lock.
+do $$
+declare f text;
+begin
+  foreach f in array array[
+    'public.admin_overview()',
+    'public.admin_series(int, text[])',
+    'public.admin_top(text, int, int)',
+    'public.admin_errors(int, int)',
+    'public.admin_traces(int)'
+  ] loop
+    execute format('revoke all on function %s from public, anon', f);
+    execute format('grant execute on function %s to authenticated', f);
+  end loop;
+end $$;
+
+-- ─────────────────────────────────────────────
 -- Known gap
 --
 -- Report writes go through public.report_machine() and new-machine writes

@@ -21,8 +21,11 @@ flowchart TB
   pages["GitHub Pages<br/>serves main as-is"] --> app
 
   app["index.html + app/*.js<br/>native ES modules, no build"]
-  app <-->|"PostgREST + RPC"| db[("Supabase Postgres<br/>machines · reports · machine_submissions")]
+  app <-->|"PostgREST + RPC"| db[("Supabase Postgres<br/>machines · reports · machine_submissions<br/>private.telemetry_*")]
   app -.->|"no keys in app/config.js"| ls[("localStorage<br/>local mode fallback")]
+  app -->|"telemetry, live only"| db
+  pages --> admin["admin/*.js<br/>the dashboard, English"]
+  admin <-->|"admin_* RPCs, behind is_admin()"| db
 ```
 
 Two things worth noticing. The seed data goes to *both* sides — the same
@@ -232,6 +235,9 @@ flowchart TD
   roll --> daily
   roll --> prune["prune telemetry_raw + the flush guard"]
   raw --> otlp["private.otlp_export()<br/>renders it back as OTLP/JSON"]
+  daily --> read["public.admin_overview / series / top / errors / traces"]
+  raw --> read
+  read --> panel["/admin/ — the dashboard"]
 ```
 
 `ingest_telemetry()` is guarded exactly like the two write functions above
@@ -239,3 +245,32 @@ it: same salt, same hashing, same string returns. It adds a metric registry,
 which is the part that stops a caller inventing names and dimension values
 until the forever-table is the size of the free tier.
 `docs/observability-plan.md` has the arithmetic.
+
+## 9. Who gets to read the dashboard
+
+The panel at `/admin/` is public HTML on GitHub Pages, served from a public
+repo, using the public anon key. That is fine, and it is fine for exactly one
+reason: **the page is not the gate.** Every read goes through a
+`security definer` function that asks Postgres first, and the tables it reads
+live in `private`, which the Data API does not expose at all.
+
+```mermaid
+flowchart TD
+  page["/admin/ — public HTML, public anon key"] --> pw["password"]
+  pw --> totp["TOTP challenge<br/>Supabase Auth issues aal2"]
+  totp --> rpc["public.admin_* — security definer"]
+  rpc --> guard["private.admin_guard()"]
+  guard --> chk{"public.is_admin()"}
+  chk -->|"uid not on private.admins"| no["raise 42501 · not authorised"]
+  chk -->|"aal1, or no aal claim"| no
+  chk -->|"token email no longer matches the row"| no
+  chk -->|"all three hold"| yes["read private.telemetry_* · log to admin_access"]
+```
+
+Three things carry the weight, in this order: **sign-ups are off** in Supabase
+Auth, so no account can be created to be refused with; the allowlist is keyed
+on the **uid**, because Supabase lets a user change their own email; and
+`aal2` is required **in the database**, so a password alone is never enough.
+`require_aal2` is a column rather than a constant, so it can be relaxed with
+an `update` if enrolling TOTP on a phone turns out to be miserable — it
+defaults to on, and `test/integration/admin.test.js` proves it is consulted.

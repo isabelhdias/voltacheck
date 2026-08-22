@@ -85,7 +85,9 @@ PostgREST. Anonymous users have no INSERT anywhere: writes go through
 Postgres functions that rate-limit by device and IP, check proximity for a
 report, and hold new machines in a review queue until they're approved. Each
 of those functions also counts what it decided, which is what the admin
-dashboard is read off — see
+dashboard at `/admin/` is read off — coverage, the report funnel, latency and
+errors, on telemetry sized to fit Supabase's free tier. The panel is public
+HTML behind a database-side gate rather than a hidden URL; see
 [`docs/observability-plan.md`](docs/observability-plan.md).
 
 Leave the two values in `app/config.js` empty and the app falls back to
@@ -126,6 +128,7 @@ published at `/preview/pr-N/` with the database keys blanked.
 |---|---|
 | `index.html` | markup + styles, one script tag |
 | `app/` | the modules: `domain` (pure logic), `store`, `api`, `map`, `ui`, `telemetry`, `config`, `main` |
+| `admin/` | the private dashboard at `/admin/` — coverage, activity, the report funnel, errors and traces. English; gated by `public.is_admin()` in Postgres, not by the page |
 | `seed/` | 2 444 machines, generated — as JS for the browser, CSV and SQL for Supabase |
 | `schema.sql` | tables, RLS, and the three functions that are the only way to write — reports, machine submissions, and telemetry |
 | `tools/` | the OpenStreetMap importer, the review-queue renderer, the screenshot script |
