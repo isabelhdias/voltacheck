@@ -305,12 +305,19 @@ stop. Worth reading before the link goes anywhere public.
 
 The panel lives at `<the site>/admin/`. It is public HTML — the gate is
 `public.is_admin()` in the database, not the URL — so there is nothing to
-hide and nothing to configure beyond an account. Four taps, once:
+hide and nothing to configure beyond an account.
+
+**Steps 3 and 4 need `schema.sql` applied first**, because `private.admins`
+does not exist until it is: merge the change, then run the **Migrate**
+workflow, *then* do them. Steps 1 and 2 are Supabase settings and can be done
+whenever.
 
 1. **Authentication → Providers → Email**: turn **off** "Allow new users to
-   sign up". This is the highest-value setting in the whole thing: with it
-   off, nobody can create an account at all, so the only credentials that
-   matter are yours.
+   sign up". Supabase moves this around between dashboard versions — it has
+   also lived under **Authentication → Sign In / Providers → Email**, and the
+   toggle itself is sometimes worded "Enable sign ups". It is the
+   highest-value setting in the whole thing: with it off, nobody can create
+   an account at all, so the only credentials that matter are yours.
 2. **Authentication → Users → Add user**: your email and a password. (The
    panel deliberately offers no sign-up — see step 1.)
 3. Open `/admin/` and sign in. It will tell you the account is not on the

@@ -266,17 +266,20 @@ Kept as short as possible, because every one of these is a tap on a phone
 and it is where mistakes have actually happened before.
 
 1. Supabase → Authentication → Providers → Email: **turn off "Allow new
-   users to sign up"**.
+   users to sign up"**. (Supabase moves this between dashboard versions; it
+   has also lived under Authentication → Sign In / Providers.)
 2. Supabase → Authentication → Users → **Add user**: her email and a
    password. (The panel cannot offer sign-up, by design — see step 1.)
-3. Open `/admin/`, sign in. It will say the account is not on the admin list
+3. Run the **Migrate** workflow. Steps 4 and 5 need `private.admins` to
+   exist, and it does not until `schema.sql` has been applied.
+4. Open `/admin/`, sign in. It will say the account is not on the admin list
    and print the exact `insert` with her uid already filled in — copy it into
    the SQL editor and run it once.
-4. Reload. It will ask her to enrol a second factor: scan the QR with any
+5. Reload. It will ask her to enrol a second factor: scan the QR with any
    authenticator app and type the six digits back.
 
 Everything else — tables, functions, grants, rollups — is applied by the
-Migrate workflow from `schema.sql`, as usual.
+Migrate workflow in step 3, as usual.
 
 ## Same repo, deliberately
 
