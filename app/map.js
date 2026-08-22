@@ -4,7 +4,7 @@
 // click handlers and closeSheet()/toast-style wiring, it fit ui.js's existing
 // job (DOM controls + filter state) better than map.js's (Leaflet + pins).
 
-import { MAX_PINS, GLYPH, CLUSTER_BELOW_ZOOM, CLUSTER_CELL_PX } from './config.js';
+import { MAX_PINS, GLYPH, CLUSTER_BELOW_ZOOM, CLUSTER_CELL_PX, CLUSTER_MIN } from './config.js';
 import * as store from './store.js';
 import { paintOf, filterByChain, filterByStatus, filterByDistance, sortByDistance, clusterize } from './domain.js';
 
@@ -201,8 +201,11 @@ export function draw(){
 
   if(map.getZoom() < CLUSTER_BELOW_ZOOM){
     clustersOnScreen(now).forEach(function(g){
-      if(g.count === 1) drawPin(g.machines[0], now, wanted);
-      else drawCluster(g, wanted);
+      if(g.count < CLUSTER_MIN){
+        g.machines.forEach(function(m){ drawPin(m, now, wanted); });
+      } else {
+        drawCluster(g, wanted);
+      }
     });
     var sel = store.selected && store.find(store.selected);
     if(sel) drawPin(sel, now, wanted);

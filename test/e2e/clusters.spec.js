@@ -6,6 +6,7 @@
 // count line said 2.444. A bubble has to carry the true number, so "nothing is
 // dropped" is asserted here, not just "bubbles appear".
 import { test, expect, gotoApp, expectLocalMode, zoomToCountry, mapZoom } from './fixtures.js';
+import { CLUSTER_BELOW_ZOOM, CLUSTER_MIN } from '../../app/config.js';
 
 test.use({ viewport: { width: 834, height: 1112 } });
 
@@ -22,11 +23,28 @@ function machinesDrawn(page) {
   });
 }
 
-test('the default view is unchanged: pins, no bubbles', async ({ page }) => {
+// The opening view is a city at zoom 13, below the threshold: crowded spots
+// become bubbles, and everything sparse enough keeps its own pin. Both have to
+// be there — all bubbles would throw away the statuses the app exists to show,
+// and all pins is the wall of overlapping colour this replaced.
+test('the opening view mixes pins and bubbles', async ({ page }) => {
   await gotoApp(page);
   await expectLocalMode(page);
 
   expect(await mapZoom(page)).toBe(13);
+  expect(await page.locator('.pin').count()).toBeGreaterThan(0);
+  expect(await page.locator('.cluster').count()).toBeGreaterThan(0);
+});
+
+test('zoomed in past the threshold, every machine has its own pin again', async ({ page }) => {
+  await gotoApp(page);
+  await page.evaluate(async (z) => {
+    const m = await import('/app/map.js');
+    m.map.setView([38.7365, -9.1435], z);
+    m.draw();
+  }, CLUSTER_BELOW_ZOOM);
+  await page.waitForTimeout(800);
+
   await expect(page.locator('.cluster')).toHaveCount(0);
   expect(await page.locator('.pin').count()).toBeGreaterThan(0);
 });
@@ -35,14 +53,15 @@ test('zoomed out, machines are grouped into counted bubbles', async ({ page }) =
   await gotoApp(page);
   await zoomToCountry(page);
 
-  expect(await mapZoom(page), 'the wheel should land below the clustering threshold').toBeLessThan(13);
+  expect(await mapZoom(page), 'the wheel should land below the clustering threshold')
+    .toBeLessThan(CLUSTER_BELOW_ZOOM);
   expect(await page.locator('.cluster').count()).toBeGreaterThan(0);
 
-  // Every bubble carries a number, and never "1" — a machine on its own keeps
-  // its own pin so its status stays visible.
+  // A bubble is never a handful of machines dressed up as a crowd: below
+  // CLUSTER_MIN they stay pins, which keeps each one's status visible.
   const labels = await page.locator('.cluster').allTextContents();
   for (const label of labels) {
-    expect(Number(label)).toBeGreaterThan(1);
+    expect(Number(label)).toBeGreaterThanOrEqual(CLUSTER_MIN);
   }
 });
 

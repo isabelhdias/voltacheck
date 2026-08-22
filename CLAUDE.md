@@ -46,11 +46,16 @@ Roadmap, in priority order:
    `submit_machine()` stores what was typed. It used to derive the concelho
    from the nearest machine at any distance, which filed the first real
    submission 18.8 km away under the wrong one.
-8. ~~Group the pins when zoomed out~~ — done. Below zoom 13 the map draws one
-   counted bubble per patch of screen instead of a pin per machine, which
+8. ~~Group the pins when zoomed out~~ — done. Below zoom 15 the map draws one
+   counted bubble per patch of screen holding three machines or more, which
    also retired the quiet lie in the `MAX_PINS` cap: the country view used to
-   show 400 machines while the count line said 2.444. The grouping itself is
-   `clusterize()` in `app/domain.js`, so a native port gets it too.
+   show 400 machines while the count line said 2.444. The threshold started
+   at 13 so the opening view stayed all pins, and moved to 15 because that
+   view was still a wall of overlapping pins in central Lisbon. Fewer than
+   `CLUSTER_MIN` machines in a cell stay pins at any zoom — two pins side by
+   side are not a crowd, and they still say what state each machine is in.
+   The grouping itself is `clusterize()` in `app/domain.js`, so a native port
+   gets it too.
 
 The app is live and shared — the Supabase project exists, so local mode is
 now the fallback path, not the default.
@@ -124,7 +129,8 @@ reported.
   app logic lives here any more.
 - `app/config.js` — `SUPABASE_URL` / `SUPABASE_ANON_KEY` and the other
   tunables (`STALE_AFTER`, `RECONFIRM_AFTER`, `LOOKBACK_H`, `MAX_PINS`,
-  `CLUSTER_BELOW_ZOOM`/`CLUSTER_CELL_PX` for the zoomed-out grouping, colours
+  `CLUSTER_BELOW_ZOOM`/`CLUSTER_CELL_PX`/`CLUSTER_MIN` for the zoomed-out
+  grouping, colours
   including the `FADED`/`FADED_INK` pair for aged reports, labels).
   Isabel pastes her Supabase values in here, not in `index.html`.
 - `app/domain.js` — pure status/search logic (decay, how a decayed machine is

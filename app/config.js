@@ -21,8 +21,15 @@ export const MAX_PINS = 400;
    nothing, and MAX_PINS quietly dropped the rest — the country view showed
    400 of 2.444 while the count line said 2.444. Below this zoom the map
    groups machines into counted bubbles instead, which hides nothing.
-   13 is the zoom the app opens on, so the view you land on is all pins. */
-export const CLUSTER_BELOW_ZOOM = 13;
+   15 is where a city street fits on screen and pins stop colliding, so from
+   there up every machine has its own pin again. */
+export const CLUSTER_BELOW_ZOOM = 15;
+
+/* How many machines a patch of map needs before they become a bubble. Two
+   pins side by side are not a crowd, and they keep saying what state each
+   machine is in — which a neutral bubble cannot. Below this, they stay
+   pins however far out you are. */
+export const CLUSTER_MIN = 3;
 
 /* The grid a bubble covers, in screen pixels at any zoom. Comfortably wider
    than the widest bubble (48 px): each bubble is kept inside its own cell, so

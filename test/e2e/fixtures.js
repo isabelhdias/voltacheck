@@ -74,7 +74,7 @@ export async function expectLocalMode(page) {
 }
 
 // Wheels the map out from the default zoom 13 to roughly country level, where
-// the map groups machines into counted bubbles instead of drawing a pin each.
+// every machine on screen is behind a counted bubble rather than its own pin.
 // Shared because more than one spec needs the zoomed-out map, and they must
 // agree on what "zoomed out" means.
 export async function zoomToCountry(page) {
