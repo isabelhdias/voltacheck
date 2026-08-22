@@ -37,8 +37,15 @@ passes every other one.
 
 The app used to call geolocation from exactly one place: the locate button.
 Picking a distance now also asks, because it is equally a deliberate tap and
-the filter is useless without a fix. Two entry points, both a tap, neither
-on load.
+the filter is useless without a fix. Neither fires on load.
+
+Three entry points, in fact — filing a report has called `getFix()` since
+the rate-limiting work, which this section originally failed to count. It is
+the one place where the answer is now load-bearing rather than helpful: a
+report with no coordinates is refused outright (`'nopos'`), because a
+proximity check that anyone skips by sending nothing is not a check. The
+trade is that someone who refuses the prompt can read the whole map but
+cannot report. See `docs/rate-limiting-plan.md`.
 
 "Todas" never asks — it needs no position, so prompting would be a
 permission dialog in exchange for nothing. If a fix is refused the radius is

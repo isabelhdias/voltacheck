@@ -558,6 +558,8 @@ export function init(){
         toast("Já reportaste esta máquina há pouco. Volta daqui a uns minutos.");
       } else if(r === "far"){
         toast("Só dá para reportar quando estás junto à máquina.");
+      } else if(r === "nopos"){
+        toast("Sem a tua localização não dá para reportar. Ativa-a e tenta outra vez.");
       } else if(r === "flood"){
         toast("Muitos reports deste telemóvel hoje. Tenta mais logo.");
       } else if(r === "unknown"){

@@ -144,16 +144,37 @@ if (!dockerAvailable()) {
     assert.equal(result, 'unknown');
   });
 
-  // Fail-open cases the rate limiter's design depends on. Distinct
-  // X-Forwarded-For values so these don't trip the cooldown set up by the
+  // The proximity check no longer fails open. It used to accept a report
+  // with no coordinates, which made it skippable by anyone who simply sent
+  // none — so these are the cases that keep it a check. Distinct
+  // X-Forwarded-For values so they don't trip the cooldown set up by the
   // "at the machine" test above, which used the same machine.
 
-  test('report_machine: no coordinates at all returns ok (fail open)', LONG, async () => {
+  test('report_machine: no coordinates at all returns nopos', LONG, async () => {
     const result = await reportMachine(
       { machine: machineId, state: 'ok' },
       '10.20.30.1',
     );
-    assert.equal(result, 'ok');
+    assert.equal(result, 'nopos');
+  });
+
+  test('report_machine: latitude without longitude returns nopos', LONG, async () => {
+    // Half a position is no position. Rejected before the haversine, which
+    // would otherwise return null and let the > comparison pass as unknown.
+    const result = await reportMachine(
+      { machine: machineId, state: 'ok', lat: machineLat },
+      '10.20.30.6',
+    );
+    assert.equal(result, 'nopos');
+  });
+
+  test('report_machine: a rejected nopos writes no guard row and no report', LONG, async () => {
+    // Rejections are free, but they must also be silent: nothing counted,
+    // nothing stored. Otherwise a refused report would burn the reporter's
+    // own rate-limit quota.
+    const target = freshMachine();
+    assert.equal(await reportMachine({ machine: target, state: 'ok', device: 'nopos-guard' }), 'nopos');
+    assert.equal(guardRows(target), '0:0');
   });
 
   // The radius widened 500m → 2km → 5km — see docs/rate-limiting-plan.md.

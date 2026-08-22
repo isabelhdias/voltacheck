@@ -136,7 +136,7 @@ returns text language sql stable set search_path = '' as $$
     'hex');
 $$;
 
--- Returns one of: ok, cooldown, flood, far, unknown, invalid.
+-- Returns one of: ok, cooldown, flood, far, nopos, unknown, invalid.
 -- It returns a string rather than raising, so the client can map each case to
 -- its own line of Portuguese without depending on HTTP status plumbing.
 create or replace function public.report_machine(
@@ -178,24 +178,26 @@ begin
   who_ip := private.guard_hash('ip', ip);
   who    := private.guard_hash('dev', coalesce(nullif(device, ''), ip));
 
-  -- Proximity, 5 km. The point of this check was never to prove someone is
-  -- standing at the machine — it's to accept a fresh *observation*: someone
-  -- who just left the shop, reporting from the car park or a few minutes
-  -- down the road on foot or by car, while still rejecting a report
-  -- from across the region, which isn't an observation of this machine at
-  -- all. `acc` is the browser's own accuracy radius in metres, and it is
-  -- deliberately not capped: with iOS Precise Location off the radius is
-  -- 1-20 km, and capping it would reject those people while stopping nobody
-  -- who is lying — a liar picks the coordinates too. Missing coordinates are
-  -- accepted; blocking real reports is worse than letting a few bad ones in.
-  -- And because this whole check fails open, it only ever constrains someone
-  -- who shares their real location in the first place — being generous here
-  -- costs nothing against anyone actually determined to lie.
-  if lat is not null and lng is not null then
-    slack := greatest(coalesce(acc, 0), 0);
-    if private.metres_between(lat, lng, m_lat, m_lng) > 5000 + slack then
-      return 'far';
-    end if;
+  -- Proximity, 5 km, and mandatory. The point of this check was never to
+  -- prove someone is standing at the machine — it's to accept a fresh
+  -- *observation*: someone who just left the shop, reporting from the car
+  -- park or a few minutes down the road on foot or by car, while still
+  -- rejecting a report from across the region, which isn't an observation
+  -- of this machine at all.
+  --
+  -- No coordinates is a rejection ('nopos'), not a pass — a check anyone
+  -- skips by sending nothing is not a check. `acc` is the browser's own
+  -- accuracy radius in metres and is still deliberately not capped: with
+  -- iOS Precise Location off the radius is 1-20 km, and capping it would
+  -- reject those people while stopping nobody who is lying, since anyone
+  -- forging `acc` can forge `lat`/`lng` just as easily.
+  if lat is null or lng is null then
+    return 'nopos';
+  end if;
+
+  slack := greatest(coalesce(acc, 0), 0);
+  if private.metres_between(lat, lng, m_lat, m_lng) > 5000 + slack then
+    return 'far';
   end if;
 
   if random() < 0.02 then
@@ -399,7 +401,11 @@ function getFix(){
 ```
 
 It never rejects. Denied permission, a timeout, or no geolocation API all
-resolve `null`, and `null` is accepted server-side.
+resolve `null` — which `pushReport` below turns into `"nopos"` without a
+round trip, because the server rejects a report with no coordinates too.
+(It did not, originally: `null` used to be accepted server-side. See item 5
+under "Still needs Isabel" at the end of this file for why that changed and
+what it costs.)
 
 **3. `pushReport` (line 2790).** It currently returns a boolean; make it return
 the status string so the caller can say something useful:
@@ -408,12 +414,13 @@ the status string so the caller can say something useful:
 async function pushReport(machineId, status){
   if(!live) return "ok";                    // local mode: unchanged, and no geolocation prompt
   var f = await getFix();
+  if(!f) return "nopos";                    // no position, no report — same string the server returns
   var res = await db.rpc("report_machine", {
     machine: machineId,
     state:   status,
-    lat:     f ? f.lat : null,
-    lng:     f ? f.lng : null,
-    acc:     f ? f.acc : null,
+    lat:     f.lat,
+    lng:     f.lng,
+    acc:     f.acc,
     device:  deviceId()
   });
   if(res.error) return "erro";
@@ -442,6 +449,8 @@ if(r === "ok"){
   toast("Já reportaste esta máquina há pouco. Volta daqui a uns minutos.");
 } else if(r === "far"){
   toast("Só dá para reportar quando estás junto à máquina.");
+} else if(r === "nopos"){
+  toast("Sem a tua localização não dá para reportar. Ativa-a e tenta outra vez.");
 } else if(r === "flood"){
   toast("Muitos reports deste telemóvel hoje. Tenta mais logo.");
 } else if(r === "unknown"){
@@ -486,6 +495,11 @@ Be honest about this when describing it to anyone.
   **speed bump**: it stops accidental misreports (wrong pin tapped from home,
   a stale sheet open in a background tab) and it stops a naive script that
   iterates the machine list without bothering to spoof. It is not a control.
+  Requiring coordinates rather than accepting their absence raised that bump
+  — a report with no position is now rejected outright — but it did not
+  change its nature. `acc` is uncapped, so a crafted request can still widen
+  its own radius; that costs an attacker nothing more than sending false
+  coordinates already did.
 - **The device id is client-supplied and regenerable.** Clearing site data,
   private browsing, or a one-line change produces a fresh identity. Also a
   speed bump — a good one against ordinary spam, useless against anyone
@@ -550,22 +564,40 @@ Be honest about this when describing it to anyone.
    centre, and how most reports will actually be filed — at the next set of
    lights, not in the aisle.
 
-   Because the check fails open on missing coordinates, widening it only ever
-   costs something against a person who was already sharing their real
-   location; it costs nothing against anyone willing to fake one. What 5 km
-   gives up over 2 km is thin: in dense Lisbon or Porto it now spans several
-   neighbourhoods and a good number of other machines, so a mis-tapped pin
-   across town is accepted where it used to be caught. That is a real loss,
-   and it is the reason not to go wider still — past 5 km a report is
-   plausibly from a different errand entirely, and that is no longer an
-   observation of this machine at all.
-5. **A decision, not a task:** whether to ask for location at all. The check
-   fails open — no permission means the report still goes through — so the
-   worst case for a user who says no is that they see a browser prompt once and
-   nothing else changes. If even that feels like too much friction for a map
-   that people use for ten seconds at a till, dropping the proximity check and
-   keeping only the rate limiting is a defensible choice. The rate limiting is
-   the part doing the real work.
+   What 5 km gives up over 2 km is thin: in dense Lisbon or Porto it now
+   spans several neighbourhoods and a good number of other machines, so a
+   mis-tapped pin across town is accepted where it used to be caught. That is
+   a real loss, and it is the reason not to go wider still — past 5 km a
+   report is plausibly from a different errand entirely, and that is no
+   longer an observation of this machine at all.
+
+   The radius is also load-bearing in a way it was not before, because the
+   check no longer fails open (see below). It is now the only thing standing
+   between a mis-tapped pin and a wrong colour on the map, so it should be
+   the smallest number that does not reject honest reports — not the largest
+   number that feels safe.
+5. ~~**A decision, not a task:** whether to ask for location at all.~~
+   **Decided: yes, and the check no longer fails open.** It used to — no
+   permission meant the report still went through — which made the proximity
+   check skippable by anyone who simply sent no coordinates, including every
+   ordinary browser with location switched off. A check in that shape stops
+   nothing it was built to stop: the accidental misreports it exists to catch
+   (wrong pin tapped from home, a sheet left open in a background tab) are
+   exactly the ones filed with no position attached.
+
+   `report_machine()` now returns `'nopos'` when `lat` or `lng` is null, and
+   `pushReport()` returns the same string without a round trip when `getFix()`
+   comes back empty. Know the cost before defending it: **someone who refuses
+   the location prompt, or whose browser cannot produce a fix, can read the
+   whole map but cannot report at all.** That is a real exclusion, not a
+   theoretical one — an old phone, a locked-down work device, or one tap on
+   the wrong button in the permission dialog is enough, and browsers do not
+   make it easy to change that answer later.
+
+   It buys a proximity check that actually holds for anyone not deliberately
+   forging a request. Whether that trade is right is a product judgement, and
+   it is reversible in one line if reports dry up: put the null case back to
+   accepted. Worth watching the report rate after this ships.
 
 ## Machine submissions — same idea, tighter numbers
 

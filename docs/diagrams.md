@@ -126,20 +126,26 @@ specific in Portuguese instead of surfacing an HTTP code.
 flowchart TD
   tap["Tap 'A funcionar' / 'Cheia' / 'Avariada'"] --> mode{"local mode?"}
   mode -- yes --> ls["straight to localStorage · done"]
-  mode -- no --> fix["getFix — position, only if permission is already granted"]
-  fix --> rpc["rpc: public.report_machine(...)"]
+  mode -- no --> fix["getFix — asks for position if it has not been granted yet"]
+  fix --> got{"got a fix?"}
+  got -- no --> nopos["'nopos' — refused, unavailable, or timed out.<br/>No round trip: the server rejects it too"]
+  got -- yes --> rpc["rpc: public.report_machine(...)"]
   rpc --> valid{"known machine,<br/>valid status?"}
   valid -- no --> bad["'invalid' / 'unknown'"]
-  valid -- yes --> near{"within 5 km,<br/>plus the browser's own accuracy radius?"}
-  near -- no --> far["'far'"]
+  valid -- yes --> near{"coordinates present, and within 5 km<br/>plus the browser's own accuracy radius?"}
+  near -- no --> far["'far' · 'nopos'"]
   near -- yes --> rate{"rate limits:<br/>same machine again inside 10 min ·<br/>20/h or 60/day per device · 300/h per IP"}
   rate -- over --> stop["'cooldown' / 'flood'"]
   rate -- under --> ins["INSERT into reports<br/>+ a pseudonymous guard row, deleted after 48 h"]
 ```
 
-No coordinates at all is accepted: blocking a real report is worse than
-letting an unverifiable one through, and someone willing to lie picks their
-coordinates too. `docs/rate-limiting-plan.md` has the full reasoning.
+No coordinates is a rejection, not a pass. It used to be a pass — but a check
+anyone skips by sending nothing is not a check, and the accidental misreports
+it exists to catch are exactly the ones filed with no position attached. The
+cost is one-sided and worth stating plainly: someone who refuses the location
+prompt can read the whole map but cannot report at all. Coordinates are still
+client-supplied, so this stops accidents and lazy scripts, not anyone
+determined to lie. `docs/rate-limiting-plan.md` has the full reasoning.
 
 ## 6. What a *new machine* goes through
 

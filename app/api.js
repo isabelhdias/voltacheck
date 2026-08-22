@@ -95,13 +95,22 @@ export function getFix(){
 
 export async function pushReport(machineId, status){
   if(!store.live) return "ok";                    // local mode: unchanged, and no geolocation prompt
+
+  /* report_machine() rejects a report with no coordinates ('nopos') — the
+     proximity check is the whole point of the write path, and one that can
+     be skipped by sending nothing is not a check. Refused permission, no
+     Geolocation API, a fix that times out: all land here, and there is no
+     point spending a round trip to be told so. Same string the server
+     returns, so ui.js has one case to handle rather than two. */
   var f = await getFix();
+  if(!f) return "nopos";
+
   var res = await db.rpc("report_machine", {
     machine: machineId,
     state:   status,
-    lat:     f ? f.lat : null,
-    lng:     f ? f.lng : null,
-    acc:     f ? f.acc : null,
+    lat:     f.lat,
+    lng:     f.lng,
+    acc:     f.acc,
     device:  deviceId()
   });
   if(res.error) return "erro";

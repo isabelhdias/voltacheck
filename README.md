@@ -82,8 +82,10 @@ that's the whole stack.
 
 Reports and machines live in a Supabase Postgres database, reached over
 PostgREST. Anonymous users have no INSERT anywhere: writes go through two
-Postgres functions that rate-limit by device and IP, check proximity for a
-report, and hold new machines in a review queue until they're approved.
+Postgres functions that rate-limit by device and IP, require a report to come
+from within 5 km of the machine, and hold new machines in a review queue until
+they're approved. A report with no position is refused — you can read the map
+without sharing your location, but not report with it switched off.
 
 Leave the two values in `app/config.js` empty and the app falls back to
 **local mode** — the same seed data, reports kept in `localStorage`, no

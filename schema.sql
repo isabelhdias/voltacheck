@@ -206,7 +206,7 @@ begin
     'sem-ip');
 end $$;
 
--- Returns one of: ok, cooldown, flood, far, unknown, invalid.
+-- Returns one of: ok, cooldown, flood, far, nopos, unknown, invalid.
 -- It returns a string rather than raising, so the client can map each case to
 -- its own line of Portuguese without depending on HTTP status plumbing.
 create or replace function public.report_machine(
@@ -246,27 +246,38 @@ begin
   who_ip := private.guard_hash('ip', ip);
   who    := private.guard_hash('dev', coalesce(nullif(device, ''), ip));
 
-  -- Proximity, 5 km (was 2 km). The point of this check was never to prove
-  -- someone is standing at the machine — it's to accept a fresh
+  -- Proximity, 5 km, and mandatory. The point of this check was never to
+  -- prove someone is standing at the machine — it's to accept a fresh
   -- *observation*: someone who just left the shop, reporting from the car
   -- park or a few minutes down the road on foot or by car, while still
   -- rejecting a report from across the region, which isn't an observation of
-  -- this machine at all. 5 km is still comfortably inside "the errand I am
-  -- on"; it is a different town only in the densest bits of Lisbon and
-  -- Porto, where the machine you actually used is the one you tapped.
-  -- `acc` is the browser's own accuracy radius in metres, and it is
+  -- this machine at all. 5 km is comfortably inside "the errand I am on"; it
+  -- is a different town only in the densest bits of Lisbon and Porto, where
+  -- the machine you actually used is the one you tapped.
+  --
+  -- No coordinates is a rejection ('nopos'), not a pass. This used to fail
+  -- open, on the reasoning that blocking a real report is worse than letting
+  -- an unverifiable one through — but a check anyone skips by sending
+  -- nothing is not a check, and the accidental misreports it exists to catch
+  -- (wrong pin tapped from home, a sheet left open in a background tab) are
+  -- exactly the ones that arrive with no position attached. The cost is real
+  -- and one-sided: someone who refuses the location prompt can still read
+  -- the whole map, but cannot report at all.
+  --
+  -- `acc` is the browser's own accuracy radius in metres, and it is still
   -- deliberately not capped: with iOS Precise Location off the radius is
   -- 1-20 km, and capping it would reject those people while stopping nobody
-  -- who is lying — a liar picks the coordinates too. Missing coordinates are
-  -- accepted; blocking real reports is worse than letting a few bad ones in.
-  -- And because this whole check fails open, it only ever constrains someone
-  -- who shares their real location in the first place — being generous here
-  -- costs nothing against anyone actually determined to lie.
-  if lat is not null and lng is not null then
-    slack := greatest(coalesce(acc, 0), 0);
-    if private.metres_between(lat, lng, m_lat, m_lng) > radius + slack then
-      return 'far';
-    end if;
+  -- who is lying — anyone forging `acc` can forge `lat`/`lng` just as
+  -- easily, and every machine's real position is public. Coordinates stay
+  -- client-supplied, so this is a speed bump against accidents and lazy
+  -- scripts, not a control. See docs/rate-limiting-plan.md.
+  if lat is null or lng is null then
+    return 'nopos';
+  end if;
+
+  slack := greatest(coalesce(acc, 0), 0);
+  if private.metres_between(lat, lng, m_lat, m_lng) > radius + slack then
+    return 'far';
   end if;
 
   if random() < 0.02 then
