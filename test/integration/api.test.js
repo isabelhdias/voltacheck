@@ -173,8 +173,8 @@ if (!dockerAvailable()) {
     // nothing stored. Otherwise a refused report would burn the reporter's
     // own rate-limit quota.
     const target = freshMachine();
-    assert.equal(await reportMachine({ machine: target, state: 'ok', device: 'nopos-guard' }), 'nopos');
-    assert.equal(guardRows(target), '0:0');
+    assert.equal(await reportMachine({ machine: target.id, state: 'ok', device: 'nopos-guard' }), 'nopos');
+    assert.equal(guardRows(target.id), '0:0');
   });
 
   // The radius widened 500m → 2km → 5km — see docs/rate-limiting-plan.md.
@@ -222,12 +222,24 @@ if (!dockerAvailable()) {
   // second one, leave no guard row, and make every one of these pass for the
   // wrong reason.
 
+  // The machine and where it is. Every accepted report has to carry
+  // coordinates now, so a test that only cares about IP bucketing still
+  // needs somewhere to stand — otherwise it is refused as 'nopos' before
+  // the rule it is actually testing is ever reached.
   function freshMachine() {
-    return superuserScalar(
-      "select id from public.machines where source = 'osm'" +
+    const row = superuserScalar(
+      "select id || ' ' || lat || ' ' || lng from public.machines where source = 'osm'" +
         ' and id not in (select machine_id from private.report_guard)' +
         ' order by id limit 1',
     );
+    const [id, lat, lng] = row.split(' ');
+    return { id, lat: Number(lat), lng: Number(lng) };
+  }
+
+  // Spread into a report body: standing at the machine, so only the rule
+  // under test can reject it.
+  function at(m) {
+    return { machine: m.id, lat: m.lat, lng: m.lng };
   }
 
   function guardRows(machine) {
@@ -240,25 +252,25 @@ if (!dockerAvailable()) {
     const target = freshMachine();
     // Same real address last, different forged prefixes — exactly the shape
     // Cloudflare produces for a client that sent its own header.
-    assert.equal(await reportMachine({ machine: target, state: 'ok', device: 'xff-a' }, '9.9.9.9, 203.0.113.5'), 'ok');
-    assert.equal(await reportMachine({ machine: target, state: 'full', device: 'xff-b' }, '1.1.1.1, 8.8.8.8, 203.0.113.5'), 'ok');
-    assert.equal(guardRows(target), '2:1', 'two reports, one shared IP bucket');
+    assert.equal(await reportMachine({ ...at(target), state: 'ok', device: 'xff-a' }, '9.9.9.9, 203.0.113.5'), 'ok');
+    assert.equal(await reportMachine({ ...at(target), state: 'full', device: 'xff-b' }, '1.1.1.1, 8.8.8.8, 203.0.113.5'), 'ok');
+    assert.equal(guardRows(target.id), '2:1', 'two reports, one shared IP bucket');
   });
 
   test('client_ip: genuinely different clients still get different buckets', LONG, async () => {
     const target = freshMachine();
-    assert.equal(await reportMachine({ machine: target, state: 'ok', device: 'xff-c' }, '9.9.9.9, 203.0.113.5'), 'ok');
-    assert.equal(await reportMachine({ machine: target, state: 'full', device: 'xff-d' }, '9.9.9.9, 198.51.100.77'), 'ok');
-    assert.equal(guardRows(target), '2:2', 'distinct last elements are distinct clients');
+    assert.equal(await reportMachine({ ...at(target), state: 'ok', device: 'xff-c' }, '9.9.9.9, 203.0.113.5'), 'ok');
+    assert.equal(await reportMachine({ ...at(target), state: 'full', device: 'xff-d' }, '9.9.9.9, 198.51.100.77'), 'ok');
+    assert.equal(guardRows(target.id), '2:2', 'distinct last elements are distinct clients');
   });
 
   test('client_ip: cf-connecting-ip wins over x-forwarded-for', LONG, async () => {
     const target = freshMachine();
     // Cloudflare sets cf-connecting-ip itself and rejects forged ones at the
     // edge, so it is preferred. Same cf value, different xff: one bucket.
-    assert.equal(await reportMachine({ machine: target, state: 'ok', device: 'cf-a' }, '203.0.113.5', { 'CF-Connecting-IP': '198.51.100.9' }), 'ok');
-    assert.equal(await reportMachine({ machine: target, state: 'full', device: 'cf-b' }, '192.0.2.44', { 'CF-Connecting-IP': '198.51.100.9' }), 'ok');
-    assert.equal(guardRows(target), '2:1', 'cf-connecting-ip decides; xff is ignored when it is present');
+    assert.equal(await reportMachine({ ...at(target), state: 'ok', device: 'cf-a' }, '203.0.113.5', { 'CF-Connecting-IP': '198.51.100.9' }), 'ok');
+    assert.equal(await reportMachine({ ...at(target), state: 'full', device: 'cf-b' }, '192.0.2.44', { 'CF-Connecting-IP': '198.51.100.9' }), 'ok');
+    assert.equal(guardRows(target.id), '2:1', 'cf-connecting-ip decides; xff is ignored when it is present');
   });
 
   test('report_machine: 8km away with acc:5000 (iOS approximate location) returns ok', LONG, async () => {
