@@ -11,6 +11,46 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
 
+<script>
+/* Classic, inline, and first on purpose: this has to survive whatever it is
+   reporting. A module that fails to parse, an import that 404s, a throw
+   during evaluation — none of them run a line of admin/*.js, and all three
+   used to look identical from the outside: a login form sitting there doing
+   nothing when tapped, with no message anywhere. That is the worst failure
+   mode available to a page whose entire audience is one person on a phone
+   with no console. */
+(function(){
+  function say(msg){
+    var err = document.getElementById("gate-err");
+    var note = document.getElementById("gate-note");
+    if(err) err.textContent = msg;
+    if(note) note.textContent =
+      "The panel did not start. Reload — if it says the same thing again, " +
+      "that line is the fault.";
+  }
+  window.addEventListener("error", function(e){
+    say((e && e.message ? e.message : "Script error") +
+        (e && e.filename ? " (" + String(e.filename).split("/").pop() +
+                           ":" + e.lineno + ")" : ""));
+  });
+  window.addEventListener("unhandledrejection", function(e){
+    var r = e && e.reason;
+    say("Unhandled: " + ((r && r.message) || r || "unknown"));
+  });
+  /* The watchdog. A module script that 404s or fails its MIME check reports
+     on the script element, not on window, so neither handler above fires and
+     the page would otherwise stay silent. main.js stamps data-booted the
+     moment it runs; if that never happens, say so. */
+  window.addEventListener("load", function(){
+    setTimeout(function(){
+      if(!document.documentElement.hasAttribute("data-booted")){
+        say("The panel's code did not load.");
+      }
+    }, 2000);
+  });
+})();
+</script>
+
 <style>
   /* The same tokens as the app — index.html is the source of truth for
      these and they are copied, not re-picked. A dashboard in different
@@ -141,7 +181,7 @@
   <div class="card">
     <h1>VoltaCheck · Admin</h1>
 
-    <form id="login">
+    <form id="login" hidden>
       <p>Administrators only.</p>
       <label for="email">Email</label>
       <input id="email" type="email" autocomplete="username" required>
