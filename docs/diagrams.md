@@ -135,11 +135,20 @@ flowchart TD
   near -- yes --> rate{"rate limits:<br/>same machine again inside 10 min ·<br/>20/h or 60/day per device · 300/h per IP"}
   rate -- over --> stop["'cooldown' / 'flood'"]
   rate -- under --> ins["INSERT into reports<br/>+ a pseudonymous guard row, deleted after 48 h"]
+  bad --> cnt(["counted under reports.outcome"])
+  far --> cnt
+  stop --> cnt
+  ins --> cnt
 ```
 
 No coordinates at all is accepted: blocking a real report is worse than
 letting an unverifiable one through, and someone willing to lie picks their
 coordinates too. `docs/rate-limiting-plan.md` has the full reasoning.
+
+Every one of those six outcomes is counted, which it did not used to be:
+until the dashboard existed, a report rejected as `far` left no trace
+anywhere, so a proximity rule that was turning away real people would have
+looked exactly like a quiet week. See diagram 8.
 
 ## 6. What a *new machine* goes through
 
@@ -151,6 +160,7 @@ Supabase dashboard.
 ```mermaid
 flowchart TD
   form["'Adicionar' form:<br/>name · chain · concelho · address · note"] --> rpc["rpc: public.submit_machine(...)"]
+  rpc --> cnt(["every outcome counted under submissions.outcome"])
   rpc --> sub[("machine_submissions · status = pending<br/>anon can neither read nor write this table")]
   sub --> q["review-queue.yml — three times a day"]
   q --> issue["one labelled GitHub issue,<br/>a checkbox per pending submission"]
@@ -183,3 +193,36 @@ flowchart LR
 
 CI is the only feedback loop this project has: Isabel works from a phone and
 cannot run anything locally, so a red check is the review.
+
+## 8. Where the dashboard's numbers come from
+
+Two tiers, because one would not fit the free tier. Aggregates are upserted
+in place and kept forever — they do not grow with traffic. Individual
+records are kept only for what has to be an individual, and only for a
+fortnight.
+
+This is the server half, which is what exists today: the two write guards
+count their own outcomes, and a rollup snapshots the numbers that would be
+expensive to rebuild later. The browser half — spans, logs and latency from
+real phones — arrives with `app/telemetry.js`, and this diagram grows an arm
+when it does.
+
+```mermaid
+flowchart TD
+  rep["public.report_machine()"] --> note["private.note_outcome()"]
+  sub["public.submit_machine()"] --> note
+  ing["public.ingest_telemetry()<br/>anonymous, rate limited, registry-checked"] --> note2["private.note / gauge / observe"]
+  note --> daily[("private.telemetry_daily<br/>counters · gauges · histograms<br/>kept forever, ~40 KB/day")]
+  note2 --> daily
+  ing --> raw[("private.telemetry_raw<br/>errors · slow spans · sampled traces<br/>pruned after 14 days")]
+  cron["review-queue.yml — 3×/day"] --> roll["private.telemetry_rollup_daily()"]
+  roll --> daily
+  roll --> prune["prune telemetry_raw + the flush guard"]
+  raw --> otlp["private.otlp_export()<br/>renders it back as OTLP/JSON"]
+```
+
+`ingest_telemetry()` is guarded exactly like the two write functions above
+it: same salt, same hashing, same string returns. It adds a metric registry,
+which is the part that stops a caller inventing names and dimension values
+until the forever-table is the size of the free tier.
+`docs/observability-plan.md` has the arithmetic.

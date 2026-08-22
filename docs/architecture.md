@@ -85,7 +85,7 @@ is in `docs/domain-contract.md`.
 | Layer | Command | What it covers | Needs |
 |---|---|---|---|
 | Unit | `npm run test:unit` | `domain.js` against `test/vectors/*.json` — decay, reconfirm, search ranking, chain filtering. Pure functions, no I/O. | Nothing. ~100ms. |
-| Integration | `npm run test:integration` | `app/api.js`'s paging against a **real** Postgres + PostgREST pair the suite builds and tears down itself (`test/integration/docker-env.js`) — RLS, `public.report_machine()`'s rate limiting and proximity check, and the row-cap regression `schema.sql`/`seed/machines.sql` exist to prevent. | Docker. ~6s. |
+| Integration | `npm run test:integration` | `app/api.js`'s paging against a **real** Postgres + PostgREST pair the suite builds and tears down itself (`test/integration/docker-env.js`) — RLS, `public.report_machine()`'s rate limiting and proximity check, the row-cap regression `schema.sql`/`seed/machines.sql` exist to prevent, and (`telemetry.test.js`) everything `public.ingest_telemetry()` has to refuse. Run with `--test-concurrency=1`: both files drive one set of fixed-name containers. | Docker. ~12s. |
 | E2E | `npm run test:e2e` | Real Chromium via Playwright, driving the actual `index.html` — map rendering, the sheet, search, chain chips, and the decay's rendered colours (`decay.spec.js`, `pin-colours.spec.js`). | Chromium (via `npx playwright install`). ~55s. |
 | CI | `.github/workflows/ci.yml` | Runs the three above, fastest-first, on every push to `main`. | GitHub-hosted runner only — no secrets. |
 

@@ -615,3 +615,20 @@ remove a real machine. It's a one-off, run by hand:
 delete from machines where name = 'Teste' and lat = 37.53 and lng = -7.44;
 delete from machines where name = 'Continente' and town is null;
 ```
+
+## Every outcome is now counted
+
+`report_machine()` and `submit_machine()` both return a string per outcome,
+and until the admin dashboard existed those strings were computed and thrown
+away. Each `return` now goes through `private.note_outcome()`, which
+increments a counter under `reports.outcome` or `submissions.outcome` before
+handing the same string back — the return values, the limits and the radius
+are all unchanged.
+
+This matters most for `far`. Everything above is reasoning about where to
+put the proximity radius, and none of it was ever checked against what
+actually happens: a rule turning away a steady trickle of real people
+reporting from a car park looked exactly like a quiet week. Now it doesn't.
+`docs/observability-plan.md` covers the storage; the numbers land in
+`private.telemetry_daily`, which anon cannot read.
+

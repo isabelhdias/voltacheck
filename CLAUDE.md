@@ -159,11 +159,11 @@ reported.
 - `seed/machines.js` — the generated `SEED` array (2,444 rows), imported by
   `app/store.js`. Don't edit it by hand: run `python3 tools/import_osm.py`.
 - `schema.sql` — Postgres schema for Supabase (machines, reports,
-  machine_submissions) and its RLS policies. Anon reads machines and
-  reports and can call two functions — `report_machine()` and
-  `submit_machine()` — and has no direct write anywhere. Applied by the
-  Migrate workflow, not by hand; safe to re-run. Note the "Known gap"
-  comment at the bottom.
+  machine_submissions, and the `private` telemetry tables) and its RLS
+  policies. Anon reads machines and reports and can call three functions —
+  `report_machine()`, `submit_machine()` and `ingest_telemetry()` — and has
+  no direct write anywhere. Applied by the Migrate workflow, not by hand;
+  safe to re-run. Note the "Known gap" comment at the bottom.
 - `tools/import_osm.py` — the machine importer. Python 3 stdlib, no install.
   Run it to refresh the data; it rewrites `seed/`, including `seed/machines.js`
   directly.
@@ -172,6 +172,11 @@ reported.
 - `docs/seed-data-plan.md` — where the data comes from and how to refresh it.
 - `docs/rate-limiting-plan.md` — how report writes are guarded, and what that
   does and doesn't stop.
+- `docs/observability-plan.md` — the admin dashboard: what it shows, how the
+  telemetry is stored so it fits the free tier (the arithmetic is in there),
+  where the OpenTelemetry data model is kept and where the wire format
+  deliberately isn't, and the login policy. Read before touching anything
+  under `private.telemetry_*`.
 - `docs/supabase-setup.md` — the step-by-step for creating the project and
   going from local mode to shared. Written for an iPad; no CLI.
 - `design/VoltaCheck.dc.html` — the redesign handoff from Claude Design,
@@ -204,7 +209,12 @@ reported.
   `domain.js` with `node --test`. No I/O, ~100ms.
 - `test/integration/` — `api.test.js` runs `app/api.js`'s paging and
   `report_machine()` against real Postgres + PostgREST containers that
-  `docker-env.js` builds and tears down itself. Needs Docker.
+  `docker-env.js` builds and tears down itself; `telemetry.test.js` runs
+  `ingest_telemetry()` against the same pair, mostly testing what it
+  refuses. Needs Docker. Both files drive one set of fixed-name containers,
+  so `npm run test:integration` passes `--test-concurrency=1` — without it
+  node runs the files in parallel and each tears down the other's
+  database.
 - `test/e2e/` — Playwright specs driving the real `index.html` in Chromium.
   Runs in local mode only; `fixtures.js` stubs `supabase-js` so it can never
   reach the production database.
@@ -237,7 +247,11 @@ reported.
   updates one labelled GitHub issue listing pending `machine_submissions`,
   and closes it when the queue empties. Silent when there's nothing
   waiting. Rendering lives in `tools/review_queue.sh` because the apply
-  workflow needs it too.
+  workflow needs it too. It also calls
+  `private.telemetry_rollup_daily()` — the dashboard's daily snapshot rides
+  along here rather than on pg_cron, because this workflow already holds
+  `SUPABASE_DB_URL` and enabling an extension is one more thing to do by
+  hand on a phone.
 - `.github/workflows/review-apply.yml` — turns a ticked checkbox in that
   issue into an approval or rejection, then redraws the issue. The one
   workflow reachable from a public event, so read its header comment
@@ -264,6 +278,7 @@ follow-up nobody gets to.
 | `domain.js`'s exported surface | `docs/domain-contract.md`, `docs/architecture.md`, `test/vectors/*.json` |
 | the boot path, or how live vs. local mode is decided | diagram 3, and "How it's built" in the README |
 | the guards in `report_machine()` or `submit_machine()` — limits, radius, return strings | diagram 5 or 6, `docs/rate-limiting-plan.md`, and "How it's built" in the README |
+| the telemetry tables, the metric registry, `ingest_telemetry()` or the retention windows | diagram 8, `docs/observability-plan.md` (including the free-tier arithmetic), and `test/integration/telemetry.test.js` |
 | the moderation flow or the review-queue workflows | diagram 6 and `docs/supabase-setup.md` |
 | what CI, Pages or Migrate do | diagram 7, the test table in `docs/architecture.md`, and "Tests" in the README |
 | anything visible in the app's map, topbar, sheet, filters, search or add form — pins and cluster bubbles included | re-run `node tools/screenshots.mjs` and commit what it writes to `docs/images/` |

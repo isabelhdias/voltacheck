@@ -209,6 +209,14 @@ end $$;
 -- Returns one of: ok, cooldown, flood, far, unknown, invalid.
 -- It returns a string rather than raising, so the client can map each case to
 -- its own line of Portuguese without depending on HTTP status plumbing.
+--
+-- Every one of those six strings is also counted, under
+-- `reports.outcome`, by private.note_outcome() — defined further down this
+-- file, which is fine because plpgsql resolves calls at run time and the
+-- Migrate workflow applies the whole file in one transaction. Until now the
+-- rejections were computed and thrown away: if the 2 km proximity rule were
+-- turning away real people, nothing here would ever have said so. See
+-- docs/observability-plan.md.
 create or replace function public.report_machine(
   machine  uuid,
   state    text,
@@ -231,12 +239,12 @@ declare
   n      integer;
 begin
   if state not in ('ok','full','down') then
-    return 'invalid';
+    return private.note_outcome('reports.outcome', 'invalid');
   end if;
 
   select m.lat, m.lng into m_lat, m_lng from public.machines m where m.id = machine;
   if not found then
-    return 'unknown';
+    return private.note_outcome('reports.outcome', 'unknown');
   end if;
 
   ip := private.client_ip();
@@ -259,7 +267,7 @@ begin
   if lat is not null and lng is not null then
     slack := greatest(coalesce(acc, 0), 0);
     if private.metres_between(lat, lng, m_lat, m_lng) > 2000 + slack then
-      return 'far';
+      return private.note_outcome('reports.outcome', 'far');
     end if;
   end if;
 
@@ -272,25 +280,25 @@ begin
   select count(*) into n from private.report_guard g
    where g.ident = who and g.machine_id = machine
      and g.created_at > now() - interval '10 minutes';
-  if n > 0 then return 'cooldown'; end if;
+  if n > 0 then return private.note_outcome('reports.outcome', 'cooldown'); end if;
 
   select count(*) into n from private.report_guard g
    where g.ident = who and g.created_at > now() - interval '1 hour';
-  if n >= 20 then return 'flood'; end if;
+  if n >= 20 then return private.note_outcome('reports.outcome', 'flood'); end if;
 
   select count(*) into n from private.report_guard g
    where g.ident = who and g.created_at > now() - interval '24 hours';
-  if n >= 60 then return 'flood'; end if;
+  if n >= 60 then return private.note_outcome('reports.outcome', 'flood'); end if;
 
   -- Backstop for someone rotating device ids. Loose on purpose: Portuguese
   -- mobile networks put a lot of people behind one address.
   select count(*) into n from private.report_guard g
    where g.ip_ident = who_ip and g.created_at > now() - interval '1 hour';
-  if n >= 300 then return 'flood'; end if;
+  if n >= 300 then return private.note_outcome('reports.outcome', 'flood'); end if;
 
   insert into public.reports (machine_id, status) values (machine, state);
   insert into private.report_guard (ident, ip_ident, machine_id) values (who, who_ip, machine);
-  return 'ok';
+  return private.note_outcome('reports.outcome', 'ok');
 end;
 $$;
 
@@ -373,6 +381,7 @@ create index if not exists submission_guard_ip    on private.submission_guard (i
 -- Returns one of: ok, cooldown, flood, invalid. Same string-return style as
 -- report_machine() — the client maps each case to its own line of
 -- Portuguese without depending on HTTP status plumbing.
+-- Counted under `submissions.outcome`, same as above.
 --
 -- Deliberately does NOT check the submitter's distance from the machine —
 -- adding a machine from home with accurate coordinates is legitimate and
@@ -438,21 +447,21 @@ begin
   v_address := nullif(trim(coalesce(address, '')), '');
 
   if length(v_name) < 3 or length(v_name) > 80 then
-    return 'invalid';
+    return private.note_outcome('submissions.outcome', 'invalid');
   end if;
   -- 140 chars — a short line ("ao lado da entrada"), not a place for a
   -- review essay. Room for review notes lives in the dashboard, not here.
   if v_note is not null and length(v_note) > 140 then
-    return 'invalid';
+    return private.note_outcome('submissions.outcome', 'invalid');
   end if;
   if v_town is not null and length(v_town) > 60 then
-    return 'invalid';
+    return private.note_outcome('submissions.outcome', 'invalid');
   end if;
   if v_address is not null and length(v_address) > 120 then
-    return 'invalid';
+    return private.note_outcome('submissions.outcome', 'invalid');
   end if;
   if lat is null or lng is null then
-    return 'invalid';
+    return private.note_outcome('submissions.outcome', 'invalid');
   end if;
   -- Same bounding boxes machines_insert used to check: mainland, Madeira,
   -- Azores.
@@ -461,7 +470,7 @@ begin
     or (lat between 32.30 and  33.20 and lng between -17.35 and -16.20)
     or (lat between 36.85 and  39.90 and lng between -31.40 and -24.90)
   ) then
-    return 'invalid';
+    return private.note_outcome('submissions.outcome', 'invalid');
   end if;
 
   ip := private.client_ip();
@@ -477,7 +486,7 @@ begin
   -- the machine doesn't exist yet.
   select count(*) into n from private.submission_guard g
    where g.ident = who and g.created_at > now() - interval '2 minutes';
-  if n > 0 then return 'cooldown'; end if;
+  if n > 0 then return private.note_outcome('submissions.outcome', 'cooldown'); end if;
 
   -- Submissions are for brand-new machines, and the country is already
   -- 2,400+ deep — a genuine person adds a handful of new ones in their
@@ -485,11 +494,11 @@ begin
   -- 20/hour and 60/day: 5/hour and 15/day per device.
   select count(*) into n from private.submission_guard g
    where g.ident = who and g.created_at > now() - interval '1 hour';
-  if n >= 5 then return 'flood'; end if;
+  if n >= 5 then return private.note_outcome('submissions.outcome', 'flood'); end if;
 
   select count(*) into n from private.submission_guard g
    where g.ident = who and g.created_at > now() - interval '24 hours';
-  if n >= 15 then return 'flood'; end if;
+  if n >= 15 then return private.note_outcome('submissions.outcome', 'flood'); end if;
 
   -- IP backstop for someone rotating device ids, same reasoning as
   -- report_machine()'s: shared addresses (CGNAT, a shop's wifi) shouldn't
@@ -498,7 +507,7 @@ begin
   -- rarer to begin with: 40/hour per IP.
   select count(*) into n from private.submission_guard g
    where g.ip_ident = who_ip and g.created_at > now() - interval '1 hour';
-  if n >= 40 then return 'flood'; end if;
+  if n >= 40 then return private.note_outcome('submissions.outcome', 'flood'); end if;
 
   -- Nearest existing machine. Source of the duplicate-detection signal
   -- below, and a last-resort fallback for the concelho.
@@ -545,7 +554,7 @@ begin
 
   insert into private.submission_guard (ident, ip_ident) values (who, who_ip);
 
-  return 'ok';
+  return private.note_outcome('submissions.outcome', 'ok');
 end;
 $$;
 
@@ -590,6 +599,666 @@ create trigger machine_submissions_approve
 -- review.
 drop policy if exists machines_insert on machines;
 revoke insert on table public.machines from anon, authenticated;
+
+-- ─────────────────────────────────────────────
+-- Telemetry — the admin dashboard's numbers
+--
+-- Read docs/observability-plan.md alongside this. The short version:
+--
+--   * Two tiers. `telemetry_daily` holds counters, histograms and gauges,
+--     upserted in place and kept forever — it does not grow with traffic.
+--     `telemetry_raw` holds individual records (errors, slow spans, a
+--     head-sampled slice of traces) and is pruned after 14 days.
+--   * The wire format is a compact envelope, not OTLP/JSON, because OTLP is
+--     3-4x the bytes to upload from a phone and a nested walk to parse in a
+--     function anyone can call. The OpenTelemetry *data model* is kept
+--     intact — real 16-byte trace ids, 8-byte span ids, parent links,
+--     severity numbers, explicit-bucket histograms — and
+--     private.otlp_export() renders any window of it back as OTLP/JSON, so
+--     forwarding to a real backend later needs no change in the app.
+--   * public.ingest_telemetry() is an anonymous endpoint, exactly like
+--     report_machine() and submit_machine(), and is guarded the same way:
+--     the same salt, the same hashing, the same "return a string, don't
+--     raise". Plus a metric registry, which is what stops a caller from
+--     inventing unbounded (metric, dims) combinations and filling the
+--     table one row at a time.
+--
+-- Everything here lives in `private`, which the Data API does not expose.
+-- anon and authenticated get exactly one privilege in this whole section:
+-- execute on public.ingest_telemetry(). They cannot read a byte back.
+-- ─────────────────────────────────────────────
+
+-- The registry. A metric that is not in here is dropped on ingest.
+--
+-- `dim_keys` bounds cardinality: those are the only dimension keys a metric
+-- may carry, and any value is capped at 40 characters. `source` decides who
+-- may write it — 'server' metrics are recorded by report_machine() and
+-- friends, and ingest_telemetry() refuses them, so a client cannot forge
+-- the outcome counters the dashboard's funnel is built on.
+create table if not exists private.telemetry_metric (
+  name     text primary key,
+  kind     text not null check (kind in ('counter','histogram','gauge')),
+  dim_keys text[] not null default '{}',
+  source   text not null default 'client' check (source in ('client','server')),
+  about    text
+);
+
+insert into private.telemetry_metric (name, kind, dim_keys, source, about) values
+  -- Server-side. Written inside the write guards; never accepted from a client.
+  ('reports.outcome',      'counter',   '{outcome}',        'server', 'every string report_machine() returns, including the rejections'),
+  ('submissions.outcome',  'counter',   '{outcome}',        'server', 'same, for submit_machine()'),
+  ('machines.total',       'gauge',     '{}',               'server', 'rows in machines, snapshotted daily'),
+  ('machines.new',         'gauge',     '{source}',         'server', 'machines created that day, by osm/user; recomputed, not incremented'),
+  ('reports.filed',        'gauge',     '{status}',         'server', 'accepted reports that day, by status; recomputed, not incremented'),
+  ('coverage.live',        'gauge',     '{}',               'server', 'per-mille of machines with a report inside STALE_AFTER'),
+  ('submissions.pending',  'gauge',     '{}',               'server', 'depth of the review queue'),
+  ('submissions.oldest_h', 'gauge',     '{}',               'server', 'age in hours of the oldest pending submission'),
+  ('telemetry.rejected',   'counter',   '{reason}',         'server', 'ingest entries dropped, and why'),
+  -- Client-side.
+  ('app.visit',            'counter',   '{mode}',           'client', 'one per page load'),
+  ('app.session',          'counter',   '{mode}',           'client', 'one per browser session, on its first flush'),
+  ('app.error',            'counter',   '{kind}',           'client', 'window.onerror and unhandledrejection'),
+  ('app.boot.duration',    'histogram', '{mode}',           'client', 'page load to first usable map'),
+  ('db.pull.duration',     'histogram', '{kind}',           'client', 'machines and reports pulls, separately'),
+  ('db.rpc.duration',      'histogram', '{rpc,outcome}',    'client', 'report_machine and submit_machine, as the phone sees them'),
+  ('db.pull.rows',         'counter',   '{kind}',           'client', 'rows actually received, to catch a paging regression'),
+  ('map.render.duration',  'histogram', '{mode}',           'client', 'pins vs clusters'),
+  ('sheet.open',           'counter',   '{state}',          'client', 'the top of the report funnel'),
+  ('report.tap',           'counter',   '{status}',         'client', 'a state was tapped'),
+  ('report.result',        'counter',   '{outcome}',        'client', 'what the phone saw come back — differs from reports.outcome when the network ate it'),
+  ('search.town',          'counter',   '{town}',           'client', 'concelho searched, or sem-resultado'),
+  ('filter.chain',         'counter',   '{chain}',          'client', 'chain chip tapped'),
+  ('filter.status',        'counter',   '{status}',         'client', 'status checkbox toggled on'),
+  ('filter.distance',      'counter',   '{km}',             'client', 'distance segment picked'),
+  ('locate.tap',           'counter',   '{outcome}',        'client', 'granted/denied/timeout/unavailable'),
+  ('page.view',            'counter',   '{page}',           'client', 'app or admin')
+on conflict (name) do update
+  set kind = excluded.kind, dim_keys = excluded.dim_keys,
+      source = excluded.source, about = excluded.about;
+
+-- Aggregates, kept forever. One row per (day, metric, dims).
+--
+-- `value` carries counters (summed) and gauges (overwritten). Gauges that
+-- are not whole numbers are scaled to integers by the metric's definition —
+-- coverage.live is per-mille — because a bigint that is exact beats a float
+-- that is nearly right for something read off a dashboard.
+--
+-- Histograms use hits/sum_ms/max_ms plus `buckets`, a fixed 12-element
+-- explicit-bucket histogram in OpenTelemetry's sense. Boundaries are in
+-- private.hist_bounds() below; storing the boundaries per row would triple
+-- the row for no gain, since they never change.
+create table if not exists private.telemetry_daily (
+  day     date   not null,
+  metric  text   not null,
+  dims    jsonb  not null default '{}'::jsonb,
+  value   bigint not null default 0,
+  hits    bigint not null default 0,
+  sum_ms  double precision not null default 0,
+  max_ms  double precision,
+  buckets bigint[],
+  primary key (day, metric, dims)
+);
+
+-- Individual records. Only what needs to be an individual: errors, spans
+-- over a threshold, and a head-sampled slice of traces for the waterfall on
+-- the dashboard's Saúde screen. Everything else is counted above and never
+-- stored, which is the whole reason this fits in the free tier.
+--
+-- Note what is NOT on this row: no IP hash (it lives on telemetry_guard,
+-- one row per flush rather than one per event), no coordinates, no URL, no
+-- user agent string beyond a coarse bucket in `attrs`. Trace and span ids
+-- are bytea, not hex text — 16 and 8 bytes instead of 32 and 16.
+create table if not exists private.telemetry_raw (
+  id        bigint generated always as identity primary key,
+  at        timestamptz not null default now(),
+  kind      text not null check (kind in ('span','log')),
+  name      text not null,
+  severity  smallint,
+  trace_id  bytea,
+  span_id   bytea,
+  parent_id bytea,
+  dur_ms    integer,
+  attrs     jsonb not null default '{}'::jsonb,
+  sess      uuid,
+  release   text
+);
+create index if not exists telemetry_raw_at    on private.telemetry_raw (at desc);
+create index if not exists telemetry_raw_name  on private.telemetry_raw (name, at desc);
+create index if not exists telemetry_raw_trace on private.telemetry_raw (trace_id);
+
+-- One row per accepted flush. Same shape and reasoning as
+-- private.report_guard: pseudonyms only, dropped after 48 h.
+create table if not exists private.telemetry_guard (
+  id         bigint generated always as identity primary key,
+  ident      text not null,
+  ip_ident   text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists telemetry_guard_ident on private.telemetry_guard (ident, created_at desc);
+create index if not exists telemetry_guard_ip    on private.telemetry_guard (ip_ident, created_at desc);
+
+-- ── Limits, in one place so the plan doc and the code cannot drift ──
+--
+-- TELEMETRY_RAW_MAX is the ceiling that keeps a flood from filling the
+-- database: above it the raw tier stops accepting writes and ingestion
+-- falls back to counting only, which costs no space at all. 400.000 rows is
+-- roughly 120 MB of a 500 MB tier, and about 500 times a normal fortnight.
+create or replace function private.telemetry_limits() returns jsonb
+language sql immutable parallel safe set search_path = '' as $$
+  select jsonb_build_object(
+    'raw_days',        14,      -- retention for telemetry_raw
+    'guard_hours',     48,      -- retention for telemetry_guard
+    'raw_max',         400000,  -- hard ceiling on telemetry_raw rows
+    'raw_per_batch',   20,      -- raw records accepted per flush
+    'metrics_per_batch', 200,   -- counter/histogram entries accepted per flush
+    'dims_per_metric', 500,     -- distinct dimension combinations per metric per day
+    'dim_value_len',   40,      -- longest a dimension value may be
+    'attrs_bytes',     2000,    -- longest a raw record's attrs may be
+    'batches_per_hour_device', 60,
+    'batches_per_hour_ip',     600
+  );
+$$;
+
+-- Explicit histogram bucket boundaries, milliseconds. Twelve buckets: the
+-- eleven below plus everything above the last one.
+create or replace function private.hist_bounds() returns double precision[]
+language sql immutable parallel safe set search_path = '' as $$
+  select array[5,10,25,50,100,250,500,1000,2500,5000,10000]::double precision[];
+$$;
+
+create or replace function private.hist_index(ms double precision) returns integer
+language sql immutable parallel safe set search_path = '' as $$
+  select coalesce(
+    (select min(i) from generate_subscripts(private.hist_bounds(), 1) i
+      where ms <= (private.hist_bounds())[i]),
+    array_length(private.hist_bounds(), 1) + 1);
+$$;
+
+-- Element-wise addition for the bucket arrays. Postgres has no operator for
+-- it, and doing it with an UPDATE ... buckets[i] = ... per observation would
+-- mean one statement per bucket touched.
+create or replace function private.arr_add(a bigint[], b bigint[]) returns bigint[]
+language sql immutable parallel safe set search_path = '' as $$
+  select array_agg(coalesce(a[i], 0) + coalesce(b[i], 0) order by i)
+    from generate_series(1, greatest(coalesce(array_length(a,1),0),
+                                     coalesce(array_length(b,1),0))) i;
+$$;
+
+-- ── The three ways a number gets recorded ──
+
+-- The parameters are p_-prefixed on purpose. plpgsql substitutes its
+-- variables into an ON CONFLICT target list, so a parameter called `metric`
+-- would turn `on conflict (day, metric, dims)` into `on conflict (day, $1,
+-- $2)` and fail at run time, not at creation. Same for gauge() and observe().
+create or replace function private.note(p_metric text, p_dims jsonb, p_n bigint default 1)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  insert into private.telemetry_daily (day, metric, dims, value)
+  values ((now() at time zone 'utc')::date, p_metric, coalesce(p_dims, '{}'::jsonb), p_n)
+  on conflict (day, metric, dims)
+  do update set value = telemetry_daily.value + excluded.value;
+end $$;
+
+create or replace function private.gauge(p_metric text, p_dims jsonb, p_v bigint)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  insert into private.telemetry_daily (day, metric, dims, value)
+  values ((now() at time zone 'utc')::date, p_metric, coalesce(p_dims, '{}'::jsonb), p_v)
+  on conflict (day, metric, dims)
+  do update set value = excluded.value;
+end $$;
+
+create or replace function private.observe(p_metric text, p_dims jsonb, p_ms double precision)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  delta bigint[];
+begin
+  if p_ms is null or p_ms < 0 then return; end if;
+  delta := array_fill(0::bigint, array[array_length(private.hist_bounds(),1) + 1]);
+  delta[private.hist_index(p_ms)] := 1;
+
+  insert into private.telemetry_daily (day, metric, dims, hits, sum_ms, max_ms, buckets)
+  values ((now() at time zone 'utc')::date, p_metric, coalesce(p_dims,'{}'::jsonb), 1, p_ms, p_ms, delta)
+  on conflict (day, metric, dims)
+  do update set hits    = telemetry_daily.hits + 1,
+                sum_ms  = telemetry_daily.sum_ms + excluded.sum_ms,
+                max_ms  = greatest(telemetry_daily.max_ms, excluded.max_ms),
+                buckets = private.arr_add(telemetry_daily.buckets, excluded.buckets);
+end $$;
+
+-- Records an outcome string and hands it straight back, so the write guards
+-- can stay one-line returns:  return private.note_outcome('reports.outcome', 'far');
+create or replace function private.note_outcome(metric text, outcome text) returns text
+language plpgsql security definer set search_path = '' as $$
+begin
+  perform private.note(metric, jsonb_build_object('outcome', outcome), 1);
+  return outcome;
+end $$;
+
+-- ── Housekeeping ──
+
+create or replace function private.telemetry_prune() returns void
+language plpgsql security definer set search_path = '' as $$
+declare
+  lim jsonb := private.telemetry_limits();
+begin
+  delete from private.telemetry_raw
+   where at < now() - ((lim->>'raw_days') || ' days')::interval;
+  delete from private.telemetry_guard
+   where created_at < now() - ((lim->>'guard_hours') || ' hours')::interval;
+end $$;
+
+-- The daily snapshot: the handful of numbers that are cheap to compute from
+-- the real tables and expensive to reconstruct later. Idempotent — the
+-- gauges overwrite and the counters are recomputed for the day rather than
+-- incremented, so running it three times a day (which is what the
+-- review-queue workflow does) is the same as running it once.
+create or replace function private.telemetry_rollup_daily() returns void
+language plpgsql security definer set search_path = '' as $$
+declare
+  d      date := (now() at time zone 'utc')::date;
+  total  bigint;
+  live   bigint;
+  r      record;
+begin
+  select count(*) into total from public.machines;
+  perform private.gauge('machines.total', '{}'::jsonb, total);
+
+  -- Cobertura viva: machines carrying a report inside STALE_AFTER (18 h).
+  -- Per-mille, so the dashboard gets one decimal place without a float.
+  select count(distinct rp.machine_id) into live
+    from public.reports rp
+   where rp.created_at > now() - interval '18 hours';
+  perform private.gauge('coverage.live', '{}'::jsonb,
+                        case when total > 0 then (live * 1000) / total else 0 end);
+
+  select count(*) into total from public.machine_submissions where status = 'pending';
+  perform private.gauge('submissions.pending', '{}'::jsonb, total);
+
+  select coalesce(max(extract(epoch from (now() - s.created_at)) / 3600), 0)::bigint
+    into total
+    from public.machine_submissions s where s.status = 'pending';
+  perform private.gauge('submissions.oldest_h', '{}'::jsonb, total);
+
+  -- Recomputed for today rather than incremented, which is what makes this
+  -- safe to re-run. Both tables carry created_at, so there is nothing to
+  -- reconstruct from.
+  for r in
+    select m.source as k, count(*) as n from public.machines m
+     where m.created_at >= (d::timestamp at time zone 'UTC')
+       and m.created_at <  ((d + 1)::timestamp at time zone 'UTC') group by 1
+  loop
+    perform private.gauge('machines.new', jsonb_build_object('source', r.k), r.n);
+  end loop;
+
+  for r in
+    select rp.status as k, count(*) as n from public.reports rp
+     where rp.created_at >= (d::timestamp at time zone 'UTC')
+       and rp.created_at <  ((d + 1)::timestamp at time zone 'UTC') group by 1
+  loop
+    perform private.gauge('reports.filed', jsonb_build_object('status', r.k), r.n);
+  end loop;
+
+  perform private.telemetry_prune();
+end $$;
+
+-- ── The three checks every ingested entry goes through ──
+
+-- Keeps only the dimension keys the registry allows, trims the values, and
+-- returns null if the caller sent a key that is not on the list. Returning
+-- null rather than silently dropping the key matters: a metric filed under
+-- half its dimensions would quietly merge into a row that means something
+-- else.
+create or replace function private.telemetry_dims(d jsonb, allowed text[], maxlen int)
+returns jsonb language plpgsql immutable set search_path = '' as $$
+declare
+  out_d jsonb := '{}'::jsonb;
+  k     text;
+begin
+  if d is null or jsonb_typeof(d) = 'null' then return '{}'::jsonb; end if;
+  if jsonb_typeof(d) <> 'object' then return null; end if;
+  for k in select jsonb_object_keys(d) loop
+    if not (k = any(allowed)) then return null; end if;
+    if jsonb_typeof(d->k) <> 'string' then return null; end if;
+    out_d := out_d || jsonb_build_object(k, left(d->>k, maxlen));
+  end loop;
+  return out_d;
+end $$;
+
+-- Caps how many distinct dimension combinations one metric may accumulate in
+-- a day. The registry bounds the *keys*; this bounds the *values*, which is
+-- the half a registry cannot cover — search.town is legitimately open-ended,
+-- and 500 concelhos a day is already far more than Portugal has.
+create or replace function private.telemetry_dims_ok(p_metric text, p_dims jsonb, p_cap int)
+returns boolean language plpgsql stable set search_path = '' as $$
+declare
+  n integer;
+begin
+  if exists (select 1 from private.telemetry_daily t
+              where t.day = (now() at time zone 'utc')::date
+                and t.metric = p_metric and t.dims = p_dims) then
+    return true;
+  end if;
+  select count(*) into n from private.telemetry_daily t
+   where t.day = (now() at time zone 'utc')::date and t.metric = p_metric;
+  return n < p_cap;
+end $$;
+
+-- Hex string to bytea, or null if it is not exactly the right length of hex.
+-- Anything else would either throw out of decode() or store a trace id that
+-- can never join to anything.
+create or replace function private.hex_id(s text, chars int)
+returns bytea language sql immutable parallel safe set search_path = '' as $$
+  select case when s ~ ('^[0-9a-f]{' || chars || '}$') then decode(s, 'hex') end;
+$$;
+
+-- ── Ingestion ──
+--
+-- The envelope, version 1:
+--
+--   { "v":1, "sess":"<uuid>", "rel":"<release>", "mode":"live",
+--     "m":[ {"n":"app.visit","d":{"mode":"live"},"v":1} ],
+--     "h":[ {"n":"db.pull.duration","d":{"kind":"machines"},"v":[812.4,640.1]} ],
+--     "r":[ {"k":"span","n":"db.pull","t":"<32 hex>","s":"<16 hex>",
+--            "p":"<16 hex>","ms":812,"a":{...}},
+--           {"k":"log","n":"js.error","sev":17,"a":{...}} ] }
+--
+-- Returns one of: ok, partial, flood, invalid. Same string-return style as
+-- the other two public functions — 'partial' means the flush was accepted
+-- but some entries inside it were dropped, which the caller does not need
+-- to act on and the dashboard can see in telemetry.rejected.
+--
+-- Every rejection path counts itself. An endpoint that silently discards
+-- what it doesn't like is an endpoint that lies to the dashboard built on
+-- it, which would be a strange thing to build into an observability tool.
+create or replace function public.ingest_telemetry(payload jsonb)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  lim        jsonb := private.telemetry_limits();
+  ip         text;
+  who        text;
+  who_ip     text;
+  sess       uuid;
+  rel        text;
+  n          integer;
+  item       jsonb;
+  reg        private.telemetry_metric%rowtype;
+  dims       jsonb;
+  k          text;
+  v          jsonb;
+  dropped    integer := 0;
+  raw_room   integer;
+  raw_est    bigint;
+  tid        bytea;
+  sid        bytea;
+  pid        bytea;
+begin
+  if payload is null or payload->>'v' is distinct from '1' then
+    return 'invalid';
+  end if;
+
+  -- Session id is optional but must be a uuid when present: it is what the
+  -- dashboard counts distinct sessions by, and a free-text field there would
+  -- be both a cardinality hole and somewhere to smuggle a string.
+  begin
+    sess := nullif(payload->>'sess', '')::uuid;
+  exception when others then
+    return 'invalid';
+  end;
+
+  rel := left(coalesce(nullif(payload->>'rel',''), 'unknown'), 40);
+
+  if jsonb_typeof(coalesce(payload->'m','[]'::jsonb)) <> 'array'
+     or jsonb_typeof(coalesce(payload->'h','[]'::jsonb)) <> 'array'
+     or jsonb_typeof(coalesce(payload->'r','[]'::jsonb)) <> 'array' then
+    return 'invalid';
+  end if;
+
+  if jsonb_array_length(coalesce(payload->'m','[]'::jsonb))
+   + jsonb_array_length(coalesce(payload->'h','[]'::jsonb))
+     > (lim->>'metrics_per_batch')::int then
+    return 'invalid';
+  end if;
+
+  -- Rate limit, by device then by IP. Same salt, same hashing, same
+  -- reasoning as report_machine(): the IP cap is loose because Portuguese
+  -- mobile networks put a lot of people behind one address.
+  ip     := private.client_ip();
+  who_ip := private.guard_hash('ip', ip);
+  who    := private.guard_hash('tel', coalesce(sess::text, ip));
+
+  if random() < 0.02 then
+    perform private.telemetry_prune();
+  end if;
+
+  select count(*) into n from private.telemetry_guard g
+   where g.ident = who and g.created_at > now() - interval '1 hour';
+  if n >= (lim->>'batches_per_hour_device')::int then
+    perform private.note('telemetry.rejected', '{"reason":"flood_device"}'::jsonb, 1);
+    return 'flood';
+  end if;
+
+  select count(*) into n from private.telemetry_guard g
+   where g.ip_ident = who_ip and g.created_at > now() - interval '1 hour';
+  if n >= (lim->>'batches_per_hour_ip')::int then
+    perform private.note('telemetry.rejected', '{"reason":"flood_ip"}'::jsonb, 1);
+    return 'flood';
+  end if;
+
+  insert into private.telemetry_guard (ident, ip_ident) values (who, who_ip);
+
+  -- ── counters ──
+  for item in select value from jsonb_array_elements(coalesce(payload->'m','[]'::jsonb)) loop
+    select * into reg from private.telemetry_metric t where t.name = item->>'n';
+    if not found or reg.kind <> 'counter' then
+      dropped := dropped + 1;
+      perform private.note('telemetry.rejected', '{"reason":"unknown_metric"}'::jsonb, 1);
+      continue;
+    end if;
+    -- A client may not write a server metric. reports.outcome and friends are
+    -- the funnel the dashboard is built on; if the browser could increment
+    -- them, "how many reports were rejected as far" would mean nothing.
+    if reg.source <> 'client' then
+      dropped := dropped + 1;
+      perform private.note('telemetry.rejected', '{"reason":"server_metric"}'::jsonb, 1);
+      continue;
+    end if;
+    dims := private.telemetry_dims(item->'d', reg.dim_keys, (lim->>'dim_value_len')::int);
+    if dims is null then
+      dropped := dropped + 1;
+      perform private.note('telemetry.rejected', '{"reason":"bad_dims"}'::jsonb, 1);
+      continue;
+    end if;
+    if not private.telemetry_dims_ok(reg.name, dims, (lim->>'dims_per_metric')::int) then
+      dropped := dropped + 1;
+      perform private.note('telemetry.rejected', '{"reason":"dim_cardinality"}'::jsonb, 1);
+      continue;
+    end if;
+    -- A counter increment is a small positive integer. Absent means one —
+    -- most taps send no value at all. Present but not a number is malformed,
+    -- and is dropped rather than quietly counted as one: an ingest endpoint
+    -- that guesses is an ingest endpoint the dashboard cannot be read off.
+    -- The jsonb_typeof guard is also what keeps (item->>'v')::int from
+    -- throwing on a string and losing the whole flush.
+    if item ? 'v' and jsonb_typeof(item->'v') <> 'number' then
+      dropped := dropped + 1;
+      perform private.note('telemetry.rejected', '{"reason":"bad_value"}'::jsonb, 1);
+      continue;
+    end if;
+    n := case when jsonb_typeof(item->'v') = 'number'
+              then least(greatest((item->>'v')::int, 1), 1000) else 1 end;
+    perform private.note(reg.name, dims, n);
+  end loop;
+
+  -- ── histograms ──
+  for item in select value from jsonb_array_elements(coalesce(payload->'h','[]'::jsonb)) loop
+    select * into reg from private.telemetry_metric t where t.name = item->>'n';
+    if not found or reg.kind <> 'histogram' then
+      dropped := dropped + 1;
+      perform private.note('telemetry.rejected', '{"reason":"unknown_metric"}'::jsonb, 1);
+      continue;
+    end if;
+    if reg.source <> 'client' then
+      dropped := dropped + 1;
+      perform private.note('telemetry.rejected', '{"reason":"server_metric"}'::jsonb, 1);
+      continue;
+    end if;
+    dims := private.telemetry_dims(item->'d', reg.dim_keys, (lim->>'dim_value_len')::int);
+    if dims is null or not private.telemetry_dims_ok(reg.name, dims, (lim->>'dims_per_metric')::int) then
+      dropped := dropped + 1;
+      perform private.note('telemetry.rejected', '{"reason":"bad_dims"}'::jsonb, 1);
+      continue;
+    end if;
+    if jsonb_typeof(item->'v') <> 'array' or jsonb_array_length(item->'v') > 50 then
+      dropped := dropped + 1;
+      perform private.note('telemetry.rejected', '{"reason":"bad_values"}'::jsonb, 1);
+      continue;
+    end if;
+    for v in select value from jsonb_array_elements(item->'v') loop
+      if jsonb_typeof(v) = 'number' then
+        -- 10 minutes. Past that it is not a latency, it is a phone that went
+        -- to sleep mid-span, and it would drag every average it touches.
+        perform private.observe(reg.name, dims, least((v#>>'{}')::double precision, 600000));
+      end if;
+    end loop;
+  end loop;
+
+  -- ── raw records ──
+  --
+  -- The ceiling check uses pg_class.reltuples rather than count(*): it is an
+  -- estimate maintained by autovacuum, it costs one catalog lookup instead
+  -- of a scan of the biggest table here, and "roughly 400.000" is exactly
+  -- the precision this decision needs.
+  raw_room := least(jsonb_array_length(coalesce(payload->'r','[]'::jsonb)),
+                    (lim->>'raw_per_batch')::int);
+  if raw_room > 0 then
+    select coalesce(c.reltuples, 0)::bigint into raw_est
+      from pg_catalog.pg_class c
+      join pg_catalog.pg_namespace ns on ns.oid = c.relnamespace
+     where ns.nspname = 'private' and c.relname = 'telemetry_raw';
+    if raw_est >= (lim->>'raw_max')::bigint then
+      perform private.note('telemetry.rejected', '{"reason":"raw_full"}'::jsonb, raw_room);
+      raw_room := 0;
+    end if;
+  end if;
+
+  for item in select value from jsonb_array_elements(coalesce(payload->'r','[]'::jsonb)) loop
+    exit when raw_room <= 0;
+    if item->>'k' not in ('span','log')
+       or coalesce(item->>'n','') !~ '^[a-z][a-z0-9_.]{1,60}$'
+       or length(coalesce(item->'a','{}'::jsonb)::text) > (lim->>'attrs_bytes')::int then
+      dropped := dropped + 1;
+      perform private.note('telemetry.rejected', '{"reason":"bad_record"}'::jsonb, 1);
+      continue;
+    end if;
+    tid := private.hex_id(item->>'t', 32);
+    sid := private.hex_id(item->>'s', 16);
+    pid := private.hex_id(item->>'p', 16);
+    -- A span whose trace id did not survive validation can never join to
+    -- anything and otlp_export() would drop it anyway, so it is refused here
+    -- rather than stored as a row that only takes up room. Logs are allowed
+    -- to stand alone: a js.error before the first span still has to be seen.
+    if item->>'k' = 'span' and (tid is null or sid is null) then
+      dropped := dropped + 1;
+      perform private.note('telemetry.rejected', '{"reason":"bad_ids"}'::jsonb, 1);
+      continue;
+    end if;
+    insert into private.telemetry_raw
+      (kind, name, severity, trace_id, span_id, parent_id, dur_ms, attrs, sess, release)
+    values
+      (item->>'k', item->>'n',
+       case when item->>'k' <> 'log' then null
+            when jsonb_typeof(item->'sev') = 'number'
+            then least(greatest((item->>'sev')::int, 0), 24) else 9 end::smallint,
+       tid, sid, pid,
+       case when jsonb_typeof(item->'ms') = 'number'
+            then least(greatest((item->>'ms')::int, 0), 600000) else null end,
+       coalesce(item->'a', '{}'::jsonb), sess, rel);
+    raw_room := raw_room - 1;
+  end loop;
+
+  return case when dropped > 0 then 'partial' else 'ok' end;
+end;
+$$;
+
+-- Anon may call the endpoint and nothing else. No select, no insert, no
+-- read back — a client can write telemetry and can never see any.
+revoke all on function public.ingest_telemetry(jsonb) from public;
+grant execute on function public.ingest_telemetry(jsonb) to anon, authenticated;
+revoke all on table private.telemetry_raw, private.telemetry_daily,
+                   private.telemetry_metric, private.telemetry_guard
+  from anon, authenticated;
+
+-- ── OTLP export ──
+--
+-- Renders a window of stored telemetry as OpenTelemetry's OTLP/JSON, which
+-- is what makes "point this at Grafana Cloud later" a forwarder job rather
+-- than a rewrite. Nothing calls it yet; it exists so that the compact wire
+-- format above is a storage decision and not a lock-in.
+create or replace function private.otlp_export(since timestamptz, until timestamptz)
+returns jsonb language sql stable security definer set search_path = '' as $$
+  with res as (
+    select jsonb_build_object('attributes', jsonb_build_array(
+      jsonb_build_object('key','service.name','value',jsonb_build_object('stringValue','voltacheck-web')),
+      jsonb_build_object('key','service.namespace','value',jsonb_build_object('stringValue','voltacheck'))
+    )) as r
+  ),
+  attrs as (
+    select t.id,
+           coalesce(jsonb_agg(jsonb_build_object(
+             'key', a.key,
+             'value', case jsonb_typeof(a.value)
+                        when 'number'  then jsonb_build_object('doubleValue', a.value)
+                        when 'boolean' then jsonb_build_object('boolValue', a.value)
+                        else jsonb_build_object('stringValue', a.value#>>'{}')
+                      end)) filter (where a.key is not null), '[]'::jsonb) as list
+      from private.telemetry_raw t
+      left join lateral jsonb_each(t.attrs) a on true
+     where t.at >= since and t.at < until
+     group by t.id
+  ),
+  spans as (
+    select jsonb_agg(jsonb_build_object(
+             'traceId', encode(t.trace_id,'hex'),
+             'spanId',  encode(t.span_id,'hex'),
+             'parentSpanId', coalesce(encode(t.parent_id,'hex'), ''),
+             'name', t.name,
+             'kind', 1,
+             'startTimeUnixNano', (extract(epoch from t.at) * 1e9)::bigint::text,
+             'endTimeUnixNano',
+               ((extract(epoch from t.at) + coalesce(t.dur_ms,0)/1000.0) * 1e9)::bigint::text,
+             'attributes', a.list)) as list
+      from private.telemetry_raw t join attrs a on a.id = t.id
+     where t.at >= since and t.at < until and t.kind = 'span' and t.trace_id is not null
+  ),
+  logs as (
+    select jsonb_agg(jsonb_build_object(
+             'timeUnixNano', (extract(epoch from t.at) * 1e9)::bigint::text,
+             'severityNumber', coalesce(t.severity, 9),
+             'body', jsonb_build_object('stringValue', t.name),
+             'traceId', coalesce(encode(t.trace_id,'hex'), ''),
+             'spanId',  coalesce(encode(t.span_id,'hex'), ''),
+             'attributes', a.list)) as list
+      from private.telemetry_raw t join attrs a on a.id = t.id
+     where t.at >= since and t.at < until and t.kind = 'log'
+  )
+  select jsonb_build_object(
+    'resourceSpans', jsonb_build_array(jsonb_build_object(
+      'resource', (select r from res),
+      'scopeSpans', jsonb_build_array(jsonb_build_object(
+        'scope', jsonb_build_object('name','voltacheck'),
+        'spans', coalesce((select list from spans), '[]'::jsonb))))),
+    'resourceLogs', jsonb_build_array(jsonb_build_object(
+      'resource', (select r from res),
+      'scopeLogs', jsonb_build_array(jsonb_build_object(
+        'scope', jsonb_build_object('name','voltacheck'),
+        'logRecords', coalesce((select list from logs), '[]'::jsonb)))))
+  );
+$$;
 
 -- ─────────────────────────────────────────────
 -- Known gap
