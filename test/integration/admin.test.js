@@ -152,6 +152,24 @@ if (!dockerAvailable()) {
     }
   });
 
+  // The regression this exists for, named rather than left as a symptom.
+  // PostgREST picks a request's transaction mode from the called function's
+  // volatility: a STABLE function runs inside a READ ONLY transaction, where
+  // admin_guard()'s audit INSERT fails and the call comes back 405. Every one
+  // of these has a side effect, so STABLE is simply the wrong label — but the
+  // failure it causes reads as "cannot execute INSERT in a read-only
+  // transaction", which points at the guard rather than at the label.
+  test('the admin reads are VOLATILE, because they write an audit row', LONG, () => {
+    const wrong = superuserScalar(
+      "select coalesce(string_agg(p.proname, ', ' order by p.proname), '')" +
+        ' from pg_proc p join pg_namespace n on n.oid = p.pronamespace' +
+        " where n.nspname = 'public' and p.proname like 'admin\\_%'" +
+        " and p.provolatile <> 'v'",
+    );
+    assert.equal(wrong, '',
+      `these write an audit row, so PostgREST must not run them read-only: ${wrong}`);
+  });
+
   test('reads are logged', LONG, () => {
     const n = Number(superuserScalar(
       `select count(*) from private.admin_access where uid = '${ADMIN_UID}'`,

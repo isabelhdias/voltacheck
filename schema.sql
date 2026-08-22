@@ -1438,10 +1438,21 @@ end $$;
 -- One function per screen rather than one per number: a phone on a mobile
 -- connection would rather make four requests than forty, and each of these
 -- is a handful of index scans over tables measured in thousands of rows.
+--
+-- VOLATILE, not STABLE, and that is load-bearing rather than sloppy. Each of
+-- these writes an audit row through private.admin_guard(), and PostgREST
+-- decides a request's transaction mode from the function's volatility: a
+-- STABLE function is run inside a READ ONLY transaction, where that INSERT
+-- fails with "cannot execute INSERT in a read-only transaction" and the call
+-- comes back 405. Labelling a function with a side effect as STABLE is
+-- simply wrong, and this is where it shows. Caught by CI rather than by
+-- hand-testing through psql, which has no such transaction wrapper — so if
+-- the audit insert ever goes away, these may become STABLE again, and not
+-- before.
 
 -- Screen 1, "Agora".
 create or replace function public.admin_overview()
-returns jsonb language plpgsql stable security definer set search_path = '' as $$
+returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   total    bigint;
   ever     bigint;
@@ -1501,7 +1512,7 @@ end $$;
 -- everything is a few hundred rows a day, and a month of it is more JSON
 -- than a phone should download to draw four charts.
 create or replace function public.admin_series(p_days int, p_metrics text[])
-returns jsonb language plpgsql stable security definer set search_path = '' as $$
+returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   out_j jsonb;
 begin
@@ -1525,7 +1536,7 @@ end $$;
 -- The top values of one dimension over a window — the concelhos people
 -- actually search for, the chains they actually filter by.
 create or replace function public.admin_top(p_metric text, p_days int, p_limit int)
-returns jsonb language plpgsql stable security definer set search_path = '' as $$
+returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   out_j jsonb;
 begin
@@ -1547,7 +1558,7 @@ end $$;
 -- Screen 4, the errors half: grouped by message rather than listed, because
 -- one broken phone reloading twenty times is one bug, not twenty.
 create or replace function public.admin_errors(p_hours int, p_limit int)
-returns jsonb language plpgsql stable security definer set search_path = '' as $$
+returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   out_j jsonb;
 begin
@@ -1575,7 +1586,7 @@ end $$;
 -- Screen 4, the traces half: the most recent sampled traces, each with its
 -- spans in start order, so the panel can draw a waterfall.
 create or replace function public.admin_traces(p_limit int)
-returns jsonb language plpgsql stable security definer set search_path = '' as $$
+returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   out_j jsonb;
 begin
